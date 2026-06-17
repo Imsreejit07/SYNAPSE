@@ -206,243 +206,319 @@ function App() {
 
   /* ── Render ──────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-grid-pattern text-slate-200 p-6 flex flex-col items-center">
-      
-      <header className="w-full max-w-7xl flex justify-between items-center mb-8 pb-6 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-blue-500/20 rounded-xl border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-            <Zap className="w-6 h-6 text-blue-400" />
+    <div className="dark overflow-hidden h-screen flex flex-col font-body-md text-on-surface bg-[#131315]" style={{
+      backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)`,
+      backgroundSize: '20px 20px'
+    }}>
+      {/* TopAppBar Execution */}
+      <header className="flex justify-between items-center w-full px-gutter h-16 bg-background dark:bg-background border-b border-outline-variant z-50 shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-neon-blue flex items-center justify-center">
+              <span className="material-symbols-outlined text-black font-bold">bolt</span>
+            </div>
+            <div>
+              <h1 className="text-headline-lg font-headline-lg font-black text-neon-purple tracking-tighter">SYNAPSE</h1>
+              <p className="text-[10px] font-label-caps text-on-surface-variant leading-none">V3.0 MNIST ENGINE</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">SYNAPSE</h1>
-            <p className="text-sm text-slate-400 font-mono flex items-center gap-2">
-              Neuromorphic Synthesis Engine
-              <span className="text-xs bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">v3.0 MNIST</span>
-            </p>
-          </div>
+          <nav className="hidden md:flex gap-8 ml-8 h-full items-center">
+            <a className="text-neon-blue border-b-2 border-neon-blue pb-1 font-label-caps text-label-caps h-full flex items-center" href="#">Project</a>
+            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Simulate</a>
+            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Synthesize</a>
+            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Analyze</a>
+          </nav>
         </div>
-        {metrics && (
-          <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            <span className="text-blue-400">{metrics.inputCount} Inputs</span>
-            <span className="text-white/20">→</span>
-            <span className="text-amber-400">{metrics.hiddenCount} Rectifiers</span>
-            <span className="text-white/20">→</span>
-            <span className="text-pink-400">{metrics.outputCount} Outputs</span>
-            <span className="text-white/20">|</span>
-            <span className="text-purple-400">{metrics.totalEdges.toLocaleString()} Traces</span>
-          </div>
-        )}
+        <div className="flex items-center gap-4 text-on-surface-variant">
+          {metrics && (
+            <div className="hidden lg:flex items-center gap-4 text-[11px] font-label-caps border-x border-outline-variant px-6 mr-4">
+              <span className="text-neon-blue">{metrics.inputCount} INPUTS</span>
+              <span className="text-warning-yellow">{metrics.hiddenCount} RECTIFIERS</span>
+              <span className="text-neon-pink">{metrics.outputCount} OUTPUTS</span>
+              <span className="text-on-surface">{metrics.totalEdges.toLocaleString()} TRACES</span>
+            </div>
+          )}
+          <button className="material-symbols-outlined hover:text-neon-blue transition-colors">settings</button>
+          <button className="material-symbols-outlined hover:text-neon-blue transition-colors">help</button>
+          <button className="material-symbols-outlined hover:text-neon-blue transition-colors text-primary">account_circle</button>
+        </div>
       </header>
 
-      <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* ── Left Column: Upload, Metrics, Validation ── */}
-        <div className="lg:col-span-4 space-y-5">
-          
-          {/* Upload Panel */}
-          <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl border border-white/10 p-5 shadow-xl">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-purple-400" />
-              Upload Assets
-            </h2>
-            
-            <div className="space-y-3">
-              <div className="relative group">
-                <input type="file" id="model-upload" className="hidden" onChange={(e) => setModelFile(e.target.files[0])} accept=".pt,.pth" />
-                <label htmlFor="model-upload" className="flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-white/20 bg-white/5 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all cursor-pointer">
-                  <Database className="w-5 h-5 text-slate-400 group-hover:text-purple-400" />
-                  <div className="flex-1 overflow-hidden">
-                    <p className="text-sm font-medium text-slate-200 truncate">{modelFile ? modelFile.name : "Select model .pt file"}</p>
-                    <p className="text-xs text-slate-500">PyTorch State Dict</p>
-                  </div>
-                </label>
-              </div>
-
-              <div className="relative group">
-                <input type="file" id="vectors-upload" className="hidden" onChange={(e) => setTestVectorsFile(e.target.files[0])} accept=".json" />
-                <label htmlFor="vectors-upload" className="flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-white/20 bg-white/5 hover:border-blue-500/50 hover:bg-blue-500/10 transition-all cursor-pointer">
-                  <FileJson className="w-5 h-5 text-slate-400 group-hover:text-blue-400" />
-                  <div className="flex-1 overflow-hidden">
-                    <p className="text-sm font-medium text-slate-200 truncate">{testVectorsFile ? testVectorsFile.name : "Select test vectors .json"}</p>
-                    <p className="text-xs text-slate-500">JSON Array</p>
-                  </div>
-                </label>
-              </div>
-
-              <button 
-                onClick={handleCompile}
-                disabled={isCompiling}
-                className="w-full relative glow-effect rounded-xl bg-slate-800 text-white font-medium py-3 px-4 hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-white/10"
-              >
-                {isCompiling ? (
-                  <div className="w-5 h-5 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin" />
-                ) : (
-                  <>
-                    Compile to Silicon <ChevronRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
-
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3">
-                  <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-200 break-words">{error}</p>
-                </div>
-              )}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* SideNavBar Execution (Left Sidebar) */}
+        <aside className="flex flex-col w-[320px] shrink-0 z-40 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant">
+          <div className="p-panel-padding border-b border-outline-variant">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="material-symbols-outlined text-neon-blue text-sm">memory</span>
+              <span className="text-label-caps font-bold text-on-surface">Project Alpha</span>
             </div>
+            <div className="text-[11px] text-on-surface-variant font-label-caps opacity-60">V3.0 MNIST ENGINE</div>
           </div>
-
-          {/* Compilation Metrics */}
-          {metrics && (
-            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl border border-white/10 p-5 shadow-xl">
-              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <Cpu className="w-5 h-5 text-blue-400" />
-                Circuit Metrics
-              </h2>
-              <div className="grid grid-cols-2 gap-2">
-                <StatCard icon={Layers} label="IR Nodes" value={metrics.totalNodes.toLocaleString()} color="text-blue-400" />
-                <StatCard icon={GitBranch} label="IR Edges" value={metrics.totalEdges.toLocaleString()} color="text-purple-400" />
-                <StatCard icon={Zap} label="Conductances" value={metrics.conductances.toLocaleString()} color="text-violet-400" />
-                <StatCard icon={Activity} label="TIA Stages" value={metrics.tias.toLocaleString()} color="text-pink-400" />
-              </div>
-              <div className="mt-3 p-3 bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-xl border border-white/5">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Analog Architecture</p>
-                <p className="text-xs font-mono text-white">
-                  <span className="text-blue-400">{metrics.inputCount}</span> Voltage Rails → <span className="text-amber-400">{metrics.hiddenCount}</span> Rectifiers → <span className="text-pink-400">{metrics.outputCount}</span> Classifiers
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Validation Panel */}
-          {result && (
-            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl border border-white/10 p-5 shadow-xl">
-              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-emerald-400" />
-                Validation Result
-              </h2>
-              
-              <div className="space-y-3">
-                <div className={`p-3 rounded-xl border flex items-center gap-3 ${result.validation.passed ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                  {result.validation.passed ? (
-                    <CheckCircle2 className="w-7 h-7 text-emerald-500" />
-                  ) : (
-                    <XCircle className="w-7 h-7 text-red-500" />
-                  )}
-                  <div>
-                    <p className="text-base font-bold">{result.validation.passed ? "Compilation Passed" : "Compilation Failed"}</p>
-                    <p className="text-xs text-slate-400 font-mono">{result.validation.passed ? "Analog ReLU synthesis verified." : "Analog mapping diverged."}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                    <p className="text-[10px] text-slate-400 mb-0.5">Max Abs Error</p>
-                    <p className="text-sm font-mono text-blue-300">{result.validation.max_abs_error.toExponential(2)}</p>
-                  </div>
-                  <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                    <p className="text-[10px] text-slate-400 mb-0.5">Max Rel Error</p>
-                    <p className="text-sm font-mono text-purple-300">{result.validation.max_rel_error.toExponential(2)}</p>
-                  </div>
-                </div>
-
-                {/* Per-vector digit predictions */}
-                {result.validation.per_output && (
-                  <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                    <p className="text-[10px] text-slate-400 mb-2 uppercase tracking-wider">Output Vector Validation</p>
-                    <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                      {result.validation.per_output.filter((_, i) => i % Math.max(1, Math.floor(result.validation.per_output.length / 6)) === 0).map((entry, i) => (
-                        <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
-                          <span className={entry.pass ? 'text-emerald-400' : 'text-red-400'}>{entry.pass ? '✓' : '✗'}</span>
-                          <span className="text-slate-400">TV{entry.test_vector_index}[{entry.output_index}]</span>
-                          <span className="text-slate-500">err: {entry.abs_error.toExponential(1)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Right Column: Visualizer & Netlist ── */}
-        <div className="lg:col-span-8 flex flex-col gap-5">
           
-          {/* Circuit Graph Visualizer */}
-          <div className="flex-1 min-h-[600px] bg-slate-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden flex flex-col relative">
-            <div className="absolute top-0 inset-x-0 h-12 bg-black/50 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-5 z-10">
-              <h2 className="text-sm font-semibold flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-blue-400" />
-                Analog Microchip Topology
-              </h2>
-              {metrics && (
-                <span className="text-[10px] font-mono text-slate-500">
-                  {metrics.totalNodes} nodes · {metrics.totalEdges.toLocaleString()} traces
-                </span>
-              )}
-            </div>
-            
-            {result ? (
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-                fitView
-                className="bg-transparent"
-                nodesDraggable={false}
-                elementsSelectable={false}
-                edgesFocusable={false}
-                minZoom={0.05}
-                maxZoom={2}
-                style={{ paddingTop: '48px' }}
-              >
-                <Background color="#ffffff" gap={24} size={1} opacity={0.03} />
-                <Controls className="!bg-slate-800/90 !border-white/10 !rounded-lg !shadow-xl" showInteractive={false} />
-                <MiniMap
-                  nodeColor={miniMapNodeColor}
-                  maskColor="rgba(0, 0, 0, 0.7)"
-                  style={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
-                  }}
-                  pannable
-                  zoomable
-                />
-              </ReactFlow>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-3 pt-12">
-                <Cpu className="w-12 h-12 text-slate-700" />
-                <p className="text-sm">Upload model and test vectors to synthesize analog circuit.</p>
-              </div>
-            )}
-          </div>
-
-          {/* SPICE Netlist */}
-          {result && (
-            <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl overflow-hidden flex flex-col">
-              <div className="h-11 bg-black/50 border-b border-white/10 flex items-center justify-between px-5">
-                <h2 className="text-sm font-semibold flex items-center gap-2">
-                  <Code className="w-4 h-4 text-emerald-400" />
-                  SPICE Netlist
-                  <span className="text-[10px] text-slate-500 font-mono ml-1">
-                    ({result.netlist.split('\n').length} lines)
-                  </span>
-                </h2>
-                <button className="text-xs text-slate-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10" onClick={() => navigator.clipboard.writeText(result.netlist)}>
-                  Copy
+          <nav className="flex-1 py-4 overflow-y-auto">
+            <div className="mb-6 px-4">
+              <p className="text-label-caps text-[10px] text-on-surface-variant mb-3 px-2">WORKSPACE</p>
+              <div className="flex flex-col gap-1">
+                <button className="flex items-center gap-3 px-3 py-2.5 bg-primary-container text-neon-blue border-l-2 border-neon-blue font-label-caps text-label-caps">
+                  <span className="material-symbols-outlined">folder_open</span>
+                  Explorer
+                </button>
+                <button className="flex items-center gap-3 px-3 py-2.5 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps">
+                  <span className="material-symbols-outlined">account_tree</span>
+                  Netlist
+                </button>
+                <button className="flex items-center gap-3 px-3 py-2.5 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps">
+                  <span className="material-symbols-outlined">insights</span>
+                  Metrics
                 </button>
               </div>
-              <div className="p-4 overflow-auto max-h-[250px] text-[11px] font-mono text-emerald-300/80 leading-relaxed">
-                <pre>{result.netlist}</pre>
+            </div>
+
+            <div className="px-gutter mb-6">
+              <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="material-symbols-outlined text-neon-blue text-lg">cloud_upload</span>
+                    <span className="text-label-caps text-xs text-on-surface">ASSETS</span>
+                  </div>
+
+                  <div className="relative group mb-2 cursor-pointer">
+                    <input type="file" id="model-upload" className="hidden" onChange={(e) => setModelFile(e.target.files[0])} accept=".pt,.pth" />
+                    <label htmlFor="model-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">description</span>
+                        <div className="overflow-hidden">
+                          <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{modelFile ? modelFile.name : "Select model .pt file"}</div>
+                          <div className="text-[9px] font-label-caps text-on-surface-variant">PYTORCH STATE DICT</div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="relative group mb-4 cursor-pointer">
+                    <input type="file" id="vectors-upload" className="hidden" onChange={(e) => setTestVectorsFile(e.target.files[0])} accept=".json" />
+                    <label htmlFor="vectors-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">data_object</span>
+                        <div className="overflow-hidden">
+                          <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{testVectorsFile ? testVectorsFile.name : "Select test vectors .json"}</div>
+                          <div className="text-[9px] font-label-caps text-on-surface-variant">JSON ARRAY</div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {error && (
+                    <div className="mb-4 p-2 bg-danger-red/10 border border-danger-red/30 text-[10px] text-danger-red font-code-sm">
+                      {error}
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={handleCompile}
+                    disabled={isCompiling}
+                    className="w-full bg-neon-blue py-2.5 text-black font-label-caps text-xs hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isCompiling ? "COMPILING..." : "COMPILE TO SILICON"} 
+                    {!isCompiling && <span className="material-symbols-outlined text-sm">chevron_right</span>}
+                  </button>
+                </div>
               </div>
             </div>
-          )}
-        </div>
-      </main>
+          </nav>
+
+          <div className="mt-auto border-t border-outline-variant p-4">
+            <button className="flex items-center gap-3 w-full px-3 py-2 text-on-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps text-[11px]">
+              <span className="material-symbols-outlined text-sm">menu_book</span>
+              Documentation
+            </button>
+            <button className="flex items-center gap-3 w-full px-3 py-2 text-on-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps text-[11px]">
+              <span className="material-symbols-outlined text-sm text-success-green">lan</span>
+              System Status
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col relative bg-slate-950 overflow-hidden">
+          
+          <div className="flex-1 flex flex-row relative overflow-hidden">
+            {/* Canvas Zone */}
+            <section className="flex-1 relative overflow-hidden flex flex-col">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#0f172a_0%,_transparent_100%)] opacity-30 pointer-events-none"></div>
+              
+              {/* Topology Header */}
+              <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-slate-950/60 backdrop-blur-sm border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-neon-blue text-sm">memory</span>
+                  <span className="font-headline-md text-label-caps text-xs tracking-wider">ANALOG MICROCHIP TOPOLOGY</span>
+                </div>
+                {metrics && (
+                  <div className="text-[10px] font-label-caps text-on-surface-variant">{metrics.totalNodes} NODES • {metrics.totalEdges.toLocaleString()} TRACES • ZOOM: 1.0X</div>
+                )}
+              </div>
+
+              {/* React Flow Container */}
+              <div className="w-full h-full relative" style={{ paddingTop: '52px' }}>
+                {result ? (
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    className="bg-transparent"
+                    nodesDraggable={false}
+                    elementsSelectable={false}
+                    edgesFocusable={false}
+                    minZoom={0.05}
+                    maxZoom={2}
+                  >
+                    <Background color="#353436" gap={24} size={1} />
+                    <Controls className="!bg-surface-container !border-outline-variant" showInteractive={false} />
+                    <MiniMap
+                      nodeColor={miniMapNodeColor}
+                      maskColor="rgba(0, 0, 0, 0.7)"
+                      style={{
+                        backgroundColor: '#131315',
+                        border: '1px solid #353436',
+                        borderRadius: '0px',
+                      }}
+                      pannable
+                      zoomable
+                    />
+                  </ReactFlow>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
+                    <div className="relative mb-6">
+                      <div className="absolute inset-0 bg-neon-blue opacity-5 blur-2xl rounded-full"></div>
+                      <span className="material-symbols-outlined text-on-surface-variant opacity-20 text-[84px]">memory</span>
+                    </div>
+                    <p className="text-on-surface-variant opacity-40 font-label-caps text-label-caps tracking-widest max-w-xs text-center leading-relaxed">
+                        Upload model and test vectors to synthesize analog circuit.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Right Properties Panel */}
+            <aside className="w-64 shrink-0 bg-surface-container-high border-l border-outline-variant flex flex-col z-40 overflow-y-auto">
+              <div className="h-[52px] shrink-0 border-b border-outline-variant flex items-center px-4">
+                <span className="text-label-caps text-on-surface-variant font-bold uppercase tracking-tighter">Properties</span>
+              </div>
+              
+              <div className="p-4 flex-1 flex flex-col">
+                {metrics ? (
+                  <>
+                    <p className="text-label-caps text-[10px] text-on-surface-variant mb-3">CIRCUIT METRICS</p>
+                    <div className="grid grid-cols-2 gap-2 mb-6">
+                      <div className="bg-surface-container-low p-3 border border-slate-800">
+                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">IR NODES</div>
+                        <div className="text-headline-md font-headline-md text-neon-blue">{metrics.totalNodes.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-surface-container-low p-3 border border-slate-800">
+                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">IR EDGES</div>
+                        <div className="text-headline-md font-headline-md text-neon-purple">{metrics.totalEdges.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-surface-container-low p-3 border border-slate-800">
+                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">CONDUCTANCES</div>
+                        <div className="text-headline-md font-headline-md text-on-surface">{metrics.conductances.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-surface-container-low p-3 border border-slate-800">
+                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">TIA STAGES</div>
+                        <div className="text-headline-md font-headline-md text-neon-pink">{metrics.tias.toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    {result && result.validation && (
+                      <>
+                        <p className="text-label-caps text-[10px] text-on-surface-variant mb-3">VALIDATION RESULT</p>
+                        <div className={`p-3 mb-4 border ${result.validation.passed ? 'bg-success-green/10 border-success-green/30 text-success-green' : 'bg-danger-red/10 border-danger-red/30 text-danger-red'} flex items-center gap-3`}>
+                          <span className="material-symbols-outlined text-[20px]">{result.validation.passed ? 'check_circle' : 'cancel'}</span>
+                          <div>
+                            <div className="text-[10px] font-bold font-label-caps">{result.validation.passed ? "PASSED" : "FAILED"}</div>
+                            <div className="text-[9px] opacity-80 font-code-sm">{result.validation.passed ? "Analog synthesis verified" : "Mapping diverged"}</div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mb-6">
+                          <div className="bg-surface-container-low p-3 border border-slate-800">
+                            <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">MAX ABS ERR</div>
+                            <div className="text-code-sm text-neon-blue">{result.validation.max_abs_error.toExponential(1)}</div>
+                          </div>
+                          <div className="bg-surface-container-low p-3 border border-slate-800">
+                            <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">MAX REL ERR</div>
+                            <div className="text-code-sm text-neon-purple">{result.validation.max_rel_error.toExponential(1)}</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center">
+                    <span className="material-symbols-outlined text-on-surface-variant opacity-20 text-[40px] mb-4">info</span>
+                    <p className="text-label-caps text-on-surface-variant opacity-50">No component selected</p>
+                  </div>
+                )}
+                
+                <div className="mt-auto w-full border-t border-outline-variant/30 pt-4">
+                  <div className="flex justify-between items-center text-[10px] font-label-caps mb-3">
+                    <span className="text-on-surface-variant/60">Live Synthesis</span>
+                    <div className="w-8 h-4 bg-neon-blue/20 flex items-center justify-end px-0.5">
+                      <div className="w-3 h-3 bg-neon-blue"></div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant">
+                    <span>CPU LOAD</span>
+                    <span className="text-neon-blue">4.2%</span>
+                  </div>
+                  <div className="w-full h-1 bg-surface-variant mt-1 mb-3 overflow-hidden">
+                    <div className="bg-neon-blue h-full" style={{width: '4.2%'}}></div>
+                  </div>
+                  <div className="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant">
+                    <span>VRAM</span>
+                    <span className="text-neon-pink">0.8 GB</span>
+                  </div>
+                  <div className="w-full h-1 bg-surface-variant mt-1 overflow-hidden">
+                    <div className="bg-neon-pink h-full" style={{width: '12%'}}></div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          {/* Analysis Terminal (Bottom) */}
+          <footer className="h-[240px] shrink-0 bg-deep-black border-t border-slate-800 flex flex-col z-50">
+            <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex justify-between items-center shrink-0">
+              <div className="flex gap-4">
+                <button className="text-[10px] font-label-caps text-neon-blue border-b border-neon-blue px-2 py-1">NETLIST</button>
+                <button className="text-[10px] font-label-caps text-on-surface-variant px-2 py-1 hover:text-on-surface transition-colors">SPICE_LOG</button>
+              </div>
+              <div className="flex items-center gap-3">
+                {result && result.validation && result.validation.passed && (
+                  <span className="text-[9px] font-label-caps text-success-green">● COMPILATION SUCCESSFUL</span>
+                )}
+                <button className="material-symbols-outlined text-sm text-on-surface-variant hover:text-white">close</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 font-code-sm text-code-sm text-on-surface-variant selection:bg-neon-blue selection:text-black">
+              {result ? (
+                <pre className="leading-relaxed text-emerald-300/80">{result.netlist}</pre>
+              ) : (
+                <pre className="leading-relaxed">
+<span className="text-neon-blue">** SYNAPSE SPICE NETLIST GENERATOR V3.0 **</span>
+<br/><span className="text-on-surface-variant opacity-40">.param vdd=1.2v</span>
+<br/><span className="text-on-surface-variant opacity-40">.temp 25</span>
+<br/><br/>
+<span className="text-warning-yellow">[WAIT] Awaiting input assets...</span>
+                </pre>
+              )}
+            </div>
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }
