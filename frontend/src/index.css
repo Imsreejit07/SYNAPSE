@@ -1,0 +1,117 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 216 34% 17%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted)); 
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border)); 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground)); 
+}
+
+/* React Flow Overrides for Dark/Tech Theme */
+.react-flow__node {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  font-family: inherit;
+}
+
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background-color: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground));
+  stroke-width: 2;
+  transition: stroke 0.3s ease;
+}
+.react-flow__edge-path:hover {
+  stroke: hsl(var(--primary));
+  stroke-width: 3;
+}
+
+/* Cyber Glow Animations */
+.glow-effect {
+  position: relative;
+}
+.glow-effect::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(to right, #3b82f6, #8b5cf6, #ec4899);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.glow-effect:hover::before {
+  opacity: 1;
+  animation: spin-slow 4s linear infinite;
+}
+
+@keyframes spin-slow {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+/* Fancy Background Pattern */
+.bg-grid-pattern {
+  background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
