@@ -1,38 +1,29 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { ReactFlow, Controls, Background, MiniMap, applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { ReactFlow, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
+import { useUser, UserButton } from '@clerk/clerk-react';
 import '@xyflow/react/dist/style.css';
 import { Upload, Zap, Activity, CheckCircle2, XCircle, Code, ChevronRight, FileJson, Database, Cpu, Layers, GitBranch } from 'lucide-react';
+import WorkspaceView from './components/WorkspaceView';
+import HardwareView from './components/HardwareView';
+import NetlistInspector from './components/NetlistInspector';
+import MetricsDashboard from './components/MetricsDashboard';
+import SettingsView from './components/SettingsView';
+import DocumentationView from './components/DocumentationView';
+import SystemStatusView from './components/SystemStatusView';
+import ProfileView from './components/ProfileView';
+import HelpView from './components/HelpView';
+import Terminal from './components/Terminal';
+import SimulationPanel from './components/panels/SimulationPanel';
+import VerificationPanel from './components/panels/VerificationPanel';
+import ManufacturePanel from './components/panels/ManufacturePanel';
+import NetlistImporter from './components/panels/NetlistImporter';
 
-/* ─────────────────────────────────────────────────────────────
-   Custom Node – lightweight for large graphs
-   ───────────────────────────────────────────────────────────── */
-const CustomNode = ({ data }) => {
-  const color = {
-    input:          'border-blue-500/70 bg-blue-500/10 text-blue-400',
-    hidden:         'border-purple-500/70 bg-purple-500/10 text-purple-400',
-    activation:     'border-pink-500/70 bg-pink-500/10 text-pink-400',
-    reference:      'border-emerald-500/70 bg-emerald-500/10 text-emerald-400',
-    bias_reference: 'border-orange-500/70 bg-orange-500/10 text-orange-400',
-    rectifier:      'border-amber-500/70 bg-amber-500/10 text-amber-400',
-  }[data.domain] || 'border-gray-500/70 bg-gray-500/10 text-gray-400';
+import PolymorphicNodeFactory from './components/nodes/PolymorphicNodeFactory';
+import { TransistorNode, PassiveNode, MemristorArrayNode } from './components/nodes/HardwareNodes';
+import SignalEdge from './components/edges/SignalEdge';
 
-  const isReLU = data.type === 'relu';
-
-  return (
-    <div className={`px-3 py-1.5 border rounded-md backdrop-blur-sm min-w-[80px] text-center text-[11px] ${color}`}>
-      <div className="font-semibold uppercase tracking-wider opacity-70" style={{ fontSize: '8px' }}>{data.domain}</div>
-      {isReLU ? (
-        <div className="font-mono flex items-center justify-center gap-0.5">
-          <Zap className="w-2.5 h-2.5" /> ReLU
-        </div>
-      ) : (
-        <div className="font-mono truncate">{data.label}</div>
-      )}
-    </div>
-  );
-};
-
-const nodeTypes = { custom: CustomNode };
+const nodeTypes = { custom: PolymorphicNodeFactory, transistor: TransistorNode, passive: PassiveNode, memristor_array: MemristorArrayNode };
+const edgeTypes = { signal: SignalEdge };
 
 /* ─────────────────────────────────────────────────────────────
    MiniMap node color helper
@@ -62,17 +53,165 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
    Main App
    ───────────────────────────────────────────────────────────── */
 function App() {
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState('architecture');
   const [modelFile, setModelFile] = useState(null);
   const [testVectorsFile, setTestVectorsFile] = useState(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [simulationData, setSimulationData] = useState(null);
+  const [timingData, setTimingData] = useState(null);
+  const [terminalTab, setTerminalTab] = useState('spice_log');
+  const terminalRef = useRef(null);
+  const [wsStatus, setWsStatus] = useState('disconnected'); // 'disconnected', 'connecting', 'connected_cloud'
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(250);
+  const [isResizingTerminal, setIsResizingTerminal] = useState(false);
+  const [isTerminalMinimized, setIsTerminalMinimized] = useState(false);
+
+  const startResizingTerminal = useCallback((e) => {
+    e.preventDefault();
+    setIsResizingTerminal(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizingTerminal) return;
+      const newHeight = window.innerHeight - e.clientY;
+      setTerminalHeight(Math.max(100, Math.min(newHeight, window.innerHeight - 200)));
+    };
+    const handleMouseUp = () => {
+      setIsResizingTerminal(false);
+    };
+
+    if (isResizingTerminal) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingTerminal]);
 
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
+  
+  const [past, setPast] = useState([]);
+  const [future, setFuture] = useState([]);
 
   const onNodesChange = useCallback((changes) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)), []);
+  
+  const takeSnapshot = useCallback(() => {
+    setPast((p) => [...p, { nodes, edges }]);
+    setFuture([]);
+  }, [nodes, edges]);
+
+  const onConnect = useCallback((params) => {
+    takeSnapshot();
+    setEdges((eds) => addEdge({ ...params, animated: true, type: 'smoothstep' }, eds));
+  }, [takeSnapshot]);
+
+  useEffect(() => {
+    const handleNodeDelete = (e) => {
+      const { id } = e.detail;
+      setNodes(nds => {
+        setPast(p => [...p, { nodes: nds, edges }]);
+        setFuture([]);
+        return nds.filter(n => n.id !== id);
+      });
+      setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
+    };
+    window.addEventListener('synapse-delete-node', handleNodeDelete);
+    return () => window.removeEventListener('synapse-delete-node', handleNodeDelete);
+  }, [edges]);
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    setPast((p) => p.slice(0, -1));
+    setFuture((f) => [{ nodes, edges }, ...f]);
+    setNodes(previous.nodes || []);
+    setEdges(previous.edges || []);
+  }, [past, nodes, edges]);
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setFuture((f) => f.slice(1));
+    setPast((p) => [...p, { nodes, edges }]);
+    setNodes(next.nodes || []);
+    setEdges(next.edges || []);
+  }, [future, nodes, edges]);
+
+  const spawnMemristor = () => {
+    takeSnapshot();
+    const newNode = {
+      id: `memristor-${Date.now()}`,
+      type: 'memristor_array',
+      position: { x: 200, y: 200 },
+      data: { label: 'Crossbar 5x5', rows: 5, cols: 5 }
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
+
+  const saveWorkspace = async () => {
+    if (!user) return alert("You must be logged in to save.");
+    
+    await fetch('http://localhost:8000/api/v1/workspace/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, nodes, edges })
+    });
+    alert('Workspace saved securely to the database!');
+  };
+
+  const loadWorkspace = async () => {
+    if (!user) return;
+    const res = await fetch(`http://localhost:8000/api/v1/workspace/load/${user.id}`);
+    const data = await res.json();
+    if (data.nodes && data.nodes.length > 0) {
+        setNodes(data.nodes);
+        setEdges(data.edges);
+    }
+  };
+
+  const clearWorkspace = () => {
+    takeSnapshot();
+    setNodes([]);
+    setEdges([]);
+    if (terminalRef?.current) terminalRef.current.write(`\x1b[38;5;11m[WARN] Workspace cleared.\x1b[0m\r\n`);
+  };
+
+
+
+  const [settings, setSettings] = useState(() => {
+    const saved = {
+      hardwareAccel: localStorage.getItem('synapse_hw_accel') === 'true',
+      engine: localStorage.getItem('default_engine') || 'SYNAPSE_ANALOG_v3.0',
+      apiKey: localStorage.getItem('synapse_api_key') || ''
+    };
+    document.documentElement.classList.add('dark');
+    return saved;
+  });
+
+  // On-the-Fly Morphing logic
+  useEffect(() => {
+    setNodes(nds => {
+      if (!nds || nds.length === 0) return nds;
+      return nds.map(n => ({
+        ...n,
+        data: { ...n.data, engine: settings.engine }
+      }));
+    });
+    
+    if (terminalRef.current && nodes.length > 0) {
+      terminalRef.current.write(`\x1b[38;5;214m[INFO] Re-rendering topology for engine: ${settings.engine}\x1b[0m\r\n`);
+    }
+  }, [settings.engine]);
 
   /* ── Compile ─────────────────────────────────── */
   const handleCompile = async () => {
@@ -84,33 +223,94 @@ function App() {
     setIsCompiling(true);
     setError(null);
     setResult(null);
+    setTimingData(null);
+    
+    if (terminalRef.current) {
+      terminalRef.current.clear();
+      terminalRef.current.write('\x1b[38;5;244m[INFO] Reading source files...\x1b[0m\r\n');
+    }
 
     try {
       const testVectorsText = await testVectorsFile.text();
-
-      const formData = new FormData();
-      formData.append('model_file', modelFile);
-      formData.append('test_vectors', testVectorsText);
-
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/compile`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Compilation failed");
+      
+      // Read model file as array buffer and base64 encode
+      const buffer = await modelFile.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
       }
+      const modelB64 = btoa(binary);
 
-      const data = await response.json();
-      setResult(data);
-      processGraph(data.ir);
+      let wsUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/compile';
+      if (settings.apiKey) {
+        wsUrl += `?api_key=${encodeURIComponent(settings.apiKey)}`;
+      }
+      
+      setWsStatus('connecting');
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        if (settings.apiKey && settings.apiKey.length >= 5) {
+          setWsStatus('connected_cloud');
+        } else {
+          setWsStatus('disconnected'); // Handled locally without special animation
+        }
+        ws.send(JSON.stringify({
+          use_gpu: settings.hardwareAccel,
+          engine: settings.engine,
+          test_vectors: testVectorsText,
+          model_file_b64: modelB64
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          // Attempt to parse as final JSON
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'final_json') {
+            const data = payload.data;
+            if (data.timing) setTimingData(data.timing);
+            setResult(data);
+            processGraph(data.ir);
+            setActiveTab('architecture');
+            setIsCompiling(false);
+            setWsStatus('disconnected');
+            ws.close();
+          }
+        } catch (e) {
+          // If not JSON, it's a stream log
+          if (terminalRef.current) {
+            terminalRef.current.write(event.data + '\r\n');
+          }
+        }
+      };
+
+      ws.onerror = (error) => {
+        if (terminalRef.current) {
+          terminalRef.current.write('\r\n\x1b[1;31m[ERROR] WebSocket connection failed\x1b[0m\r\n');
+        }
+        setIsCompiling(false);
+        setWsStatus('disconnected');
+      };
+
+      ws.onclose = (event) => {
+        if (event.code === 1008) {
+          if (terminalRef.current) {
+            terminalRef.current.write('\r\n\x1b[1;31m[ERROR] Cloud Authentication Failed: Invalid API Key.\x1b[0m\r\n');
+          }
+        }
+        setIsCompiling(false);
+        setWsStatus('disconnected');
+      };
 
     } catch (err) {
-      setError(err.message);
-    } finally {
+      if (terminalRef.current) {
+        terminalRef.current.write(`\r\n\x1b[1;31m[ERROR] ${err.message}\x1b[0m\r\n`);
+      }
       setIsCompiling(false);
+      setWsStatus('disconnected');
+      setError(err.message);
     }
   };
 
@@ -129,12 +329,27 @@ function App() {
 
     const domainCounts = {};
 
+    const degrees = {};
+    ir.edges.forEach(edge => {
+      const source = edge.source || edge.source_pos;
+      if (source) {
+        degrees[source] = (degrees[source] || 0) + 1;
+      }
+      if (edge.target) {
+        degrees[edge.target] = (degrees[edge.target] || 0) + 1;
+      }
+    });
+    
+    // Normalize to mock capacity 0.0 - 1.0 based on max degree
+    const maxDegree = Math.max(...Object.values(degrees), 1);
+
     const newNodes = ir.nodes.map(node => {
       const d = node.domain;
       if (!domainCounts[d]) domainCounts[d] = 0;
 
       const col = domainColumns[d] || { x: 600, spacing: 40 };
       const yOffset = d === 'reference' || d === 'bias_reference' ? -300 : 0;
+      const capacity = (degrees[node.id] || 0) / maxDegree;
 
       return {
         id: node.id,
@@ -147,40 +362,22 @@ function App() {
           label: node.id,
           domain: node.domain,
           type: node.type,
-          initial_value: node.initial_value
+          initial_value: node.initial_value,
+          capacity: capacity,
+          engine: settings.engine
         }
       };
     });
 
-    // Ultra-thin silicon trace edges for massive graphs
-    const isLargeGraph = ir.edges.length > 200;
-    const thinStroke = isLargeGraph ? 0.5 : 1.5;
-    const thinOpacity = isLargeGraph ? 0.35 : 0.8;
-
     const newEdges = ir.edges.map((edge, i) => {
-      if (edge.type === 'RECTIFIER') {
-        return {
-          id: `e-${i}`,
-          source: edge.source,
-          target: edge.target,
-          animated: !isLargeGraph,
-          style: { stroke: '#f59e0b', strokeWidth: isLargeGraph ? 0.8 : 2, opacity: isLargeGraph ? 0.6 : 1 },
-        };
-      }
-      if (edge.type === 'TIA') {
-        return {
-          id: `e-${i}`,
-          source: edge.source_pos,
-          target: edge.target,
-          animated: !isLargeGraph,
-          style: { stroke: '#ec4899', strokeWidth: isLargeGraph ? 0.8 : 2, opacity: isLargeGraph ? 0.6 : 1 },
-        };
-      }
+      const isLargeGraph = ir.edges.length > 200;
       return {
         id: `e-${i}`,
-        source: edge.source,
+        source: edge.source || edge.source_pos, // Fallback for TIA
         target: edge.target,
-        style: { stroke: '#8b5cf6', strokeWidth: thinStroke, opacity: thinOpacity },
+        type: 'signal', // Use custom SignalEdge
+        animated: !isLargeGraph,
+        data: {} // Dynamic data generated in SignalEdge component based on hash
       };
     });
 
@@ -214,6 +411,13 @@ function App() {
       <header className="flex justify-between items-center w-full px-gutter h-16 bg-background dark:bg-background border-b border-outline-variant z-50 shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="text-on-surface-variant hover:text-neon-blue transition-colors flex items-center justify-center mr-2"
+              title="Toggle Sidebar"
+            >
+              <span className="material-symbols-outlined text-2xl">menu</span>
+            </button>
             <div className="w-8 h-8 bg-neon-blue flex items-center justify-center">
               <span className="material-symbols-outlined text-black font-bold">bolt</span>
             </div>
@@ -223,10 +427,26 @@ function App() {
             </div>
           </div>
           <nav className="hidden md:flex gap-8 ml-8 h-full items-center">
-            <a className="text-neon-blue border-b-2 border-neon-blue pb-1 font-label-caps text-label-caps h-full flex items-center" href="#">Project</a>
-            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Simulate</a>
-            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Synthesize</a>
-            <a className="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors duration-100" href="#">Analyze</a>
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); setActiveTab('architecture'); }}
+              className={`pb-1 font-label-caps text-label-caps h-full flex items-center transition-colors duration-100 ${activeTab === 'architecture' ? 'text-neon-blue border-b-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-neon-blue'}`}
+            >Architecture</a>
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); setActiveTab('simulation'); }}
+              className={`pb-1 font-label-caps text-label-caps h-full flex items-center transition-colors duration-100 ${activeTab === 'simulation' ? 'text-neon-blue border-b-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-neon-blue'}`}
+            >Simulate</a>
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); setActiveTab('verification'); }}
+              className={`pb-1 font-label-caps text-label-caps h-full flex items-center transition-colors duration-100 ${activeTab === 'verification' ? 'text-neon-blue border-b-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-neon-blue'}`}
+            >Verify</a>
+            <a 
+              href="#" 
+              onClick={(e) => { e.preventDefault(); setActiveTab('manufacture'); }}
+              className={`pb-1 font-label-caps text-label-caps h-full flex items-center transition-colors duration-100 ${activeTab === 'manufacture' ? 'text-neon-blue border-b-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-neon-blue'}`}
+            >Manufacture</a>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-on-surface-variant">
@@ -238,16 +458,32 @@ function App() {
               <span className="text-on-surface">{metrics.totalEdges.toLocaleString()} TRACES</span>
             </div>
           )}
-          <button className="material-symbols-outlined hover:text-neon-blue transition-colors">settings</button>
-          <button className="material-symbols-outlined hover:text-neon-blue transition-colors">help</button>
-          <button className="material-symbols-outlined hover:text-neon-blue transition-colors text-primary">account_circle</button>
+          <div className="flex items-center gap-2 mr-2 px-3 py-1 bg-black/20 rounded-full border border-slate-800" title="Cloud Connection Status">
+            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${wsStatus === 'connecting' ? 'bg-warning-yellow animate-pulse' : (wsStatus === 'connected_cloud' ? 'bg-neon-blue animate-pulse shadow-[0_0_8px_#00f0ff]' : 'bg-slate-600')}`}></div>
+            <span className="text-[10px] font-label-caps text-slate-400">
+              {wsStatus === 'connecting' ? 'CONNECTING...' : (wsStatus === 'connected_cloud' ? 'CLOUD ACTIVE' : 'LOCAL ENGINE')}
+            </span>
+          </div>
+
+
+
+          <button onClick={() => setActiveTab('settings')} className={`material-symbols-outlined transition-colors ${activeTab === 'settings' ? 'text-neon-blue' : 'hover:text-neon-blue'}`}>settings</button>
+          <button onClick={() => setActiveTab('help')} className={`material-symbols-outlined transition-colors ${activeTab === 'help' ? 'text-neon-blue' : 'hover:text-neon-blue'}`}>help</button>
+          {user ? (
+            <div className="flex items-center ml-2">
+              <UserButton appearance={{ elements: { userButtonAvatarBox: "w-6 h-6 border-2 border-neon-blue/50" } }} />
+            </div>
+          ) : (
+            <button onClick={() => setActiveTab('profile')} className={`material-symbols-outlined transition-colors ${activeTab === 'profile' ? 'text-neon-blue' : 'text-primary hover:text-neon-blue'}`}>account_circle</button>
+          )}
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* SideNavBar Execution (Left Sidebar) */}
-        <aside className="flex flex-col w-[320px] shrink-0 z-40 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant">
-          <div className="p-panel-padding border-b border-outline-variant">
+        <nav className={`${isSidebarCollapsed ? 'w-0 border-none' : 'w-64 border-r'} bg-surface-container-low border-outline-variant flex flex-col shrink-0 transition-all duration-300 overflow-hidden`}>
+          <div className="min-w-[16rem] flex flex-col flex-1 h-full overflow-hidden">
+            <div className="px-4 py-3 border-b border-outline-variant">
             <div className="flex items-center gap-3 mb-1">
               <span className="material-symbols-outlined text-neon-blue text-sm">memory</span>
               <span className="text-label-caps font-bold text-on-surface">Project Alpha</span>
@@ -259,265 +495,212 @@ function App() {
             <div className="mb-6 px-4">
               <p className="text-label-caps text-[10px] text-on-surface-variant mb-3 px-2">WORKSPACE</p>
               <div className="flex flex-col gap-1">
-                <button className="flex items-center gap-3 px-3 py-2.5 bg-primary-container text-neon-blue border-l-2 border-neon-blue font-label-caps text-label-caps">
-                  <span className="material-symbols-outlined">folder_open</span>
-                  Explorer
+                <button 
+                  onClick={() => setActiveTab('architecture')}
+                  className={`flex items-center gap-3 px-3 py-2.5 font-label-caps text-label-caps transition-all ${activeTab === 'architecture' ? 'bg-primary-container text-neon-blue border-l-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface border-l-2 border-transparent'}`}>
+                  <span className="material-symbols-outlined">memory</span>
+                  Architecture
                 </button>
-                <button className="flex items-center gap-3 px-3 py-2.5 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps">
-                  <span className="material-symbols-outlined">account_tree</span>
-                  Netlist
+                <button 
+                  onClick={() => setActiveTab('simulation')}
+                  className={`flex items-center gap-3 px-3 py-2.5 font-label-caps text-label-caps transition-all ${activeTab === 'simulation' ? 'bg-primary-container text-neon-blue border-l-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface border-l-2 border-transparent'}`}>
+                  <span className="material-symbols-outlined">show_chart</span>
+                  Simulation
                 </button>
-                <button className="flex items-center gap-3 px-3 py-2.5 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps">
-                  <span className="material-symbols-outlined">insights</span>
-                  Metrics
+                <button 
+                  onClick={() => setActiveTab('verification')}
+                  className={`flex items-center gap-3 px-3 py-2.5 font-label-caps text-label-caps transition-all ${activeTab === 'verification' ? 'bg-primary-container text-neon-blue border-l-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface border-l-2 border-transparent'}`}>
+                  <span className="material-symbols-outlined">fact_check</span>
+                  Verification
+                </button>
+                <button 
+                  onClick={() => setActiveTab('manufacture')}
+                  className={`flex items-center gap-3 px-3 py-2.5 font-label-caps text-label-caps transition-all ${activeTab === 'manufacture' ? 'bg-primary-container text-neon-blue border-l-2 border-neon-blue' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface border-l-2 border-transparent'}`}>
+                  <span className="material-symbols-outlined">conveyor_belt</span>
+                  Manufacture
                 </button>
               </div>
             </div>
 
-            <div className="px-gutter mb-6">
-              <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden">
-                <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="material-symbols-outlined text-neon-blue text-lg">cloud_upload</span>
-                    <span className="text-label-caps text-xs text-on-surface">ASSETS</span>
-                  </div>
-
-                  <div className="relative group mb-2 cursor-pointer">
-                    <input type="file" id="model-upload" className="hidden" onChange={(e) => setModelFile(e.target.files[0])} accept=".pt,.pth" />
-                    <label htmlFor="model-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">description</span>
-                        <div className="overflow-hidden">
-                          <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{modelFile ? modelFile.name : "Select model .pt file"}</div>
-                          <div className="text-[9px] font-label-caps text-on-surface-variant">PYTORCH STATE DICT</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="relative group mb-4 cursor-pointer">
-                    <input type="file" id="vectors-upload" className="hidden" onChange={(e) => setTestVectorsFile(e.target.files[0])} accept=".json" />
-                    <label htmlFor="vectors-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">data_object</span>
-                        <div className="overflow-hidden">
-                          <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{testVectorsFile ? testVectorsFile.name : "Select test vectors .json"}</div>
-                          <div className="text-[9px] font-label-caps text-on-surface-variant">JSON ARRAY</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {error && (
-                    <div className="mb-4 p-2 bg-danger-red/10 border border-danger-red/30 text-[10px] text-danger-red font-code-sm">
-                      {error}
+            {activeTab === 'architecture' && (
+              <div className="px-gutter mb-6">
+                <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden">
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="material-symbols-outlined text-neon-blue text-lg">cloud_upload</span>
+                      <span className="text-label-caps text-xs text-on-surface">ASSETS</span>
                     </div>
-                  )}
 
-                  <button 
-                    onClick={handleCompile}
-                    disabled={isCompiling}
-                    className="w-full bg-neon-blue py-2.5 text-black font-label-caps text-xs hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isCompiling ? "COMPILING..." : "COMPILE TO SILICON"} 
-                    {!isCompiling && <span className="material-symbols-outlined text-sm">chevron_right</span>}
-                  </button>
+                    <div className="relative group mb-2 cursor-pointer">
+                      <input type="file" id="model-upload" className="hidden" onChange={(e) => setModelFile(e.target.files[0])} accept=".pt,.pth" />
+                      <label htmlFor="model-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">description</span>
+                          <div className="overflow-hidden">
+                            <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{modelFile ? modelFile.name : "Select model .pt file"}</div>
+                            <div className="text-[9px] font-label-caps text-on-surface-variant">PYTORCH STATE DICT</div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <NetlistImporter setNodes={setNodes} setEdges={setEdges} terminalRef={terminalRef} />
+
+                    <div className="flex flex-col gap-2 mt-4 mb-4">
+                      <div className="flex gap-2">
+                        <button onClick={saveWorkspace} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs py-2 rounded">
+                          SAVE LAYOUT
+                        </button>
+                        <button onClick={loadWorkspace} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs py-2 rounded">
+                          LOAD LAYOUT
+                        </button>
+                      </div>
+                      <button onClick={clearWorkspace} className="w-full bg-red-900/50 hover:bg-red-800/80 border border-red-500/50 text-red-200 font-mono text-xs py-2 rounded transition-colors">
+                        CLEAR LAYOUT
+                      </button>
+                    </div>
+
+                    <button onClick={spawnMemristor} className="w-full bg-neon-purple text-white py-2 mb-4 font-code-sm text-[10px] tracking-widest hover:brightness-110 active:scale-95 transition-all border border-neon-purple/50">
+                      + ADD MEMRISTOR ARRAY
+                    </button>
+
+                    <div className="relative group mb-4 cursor-pointer">
+                      <input type="file" id="vectors-upload" className="hidden" onChange={(e) => setTestVectorsFile(e.target.files[0])} accept=".json" />
+                      <label htmlFor="vectors-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-on-surface-variant text-sm group-hover:text-neon-blue">data_object</span>
+                          <div className="overflow-hidden">
+                            <div className="text-[11px] font-label-caps text-on-surface truncate w-40">{testVectorsFile ? testVectorsFile.name : "Select test vectors .json"}</div>
+                            <div className="text-[9px] font-label-caps text-on-surface-variant">JSON ARRAY</div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {error && (
+                      <div className="mb-4 p-2 bg-danger-red/10 border border-danger-red/30 text-[10px] text-danger-red font-code-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={handleCompile}
+                      disabled={isCompiling}
+                      className="w-full bg-neon-blue py-2.5 text-black font-label-caps text-xs hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isCompiling ? "COMPILING..." : "COMPILE TO SILICON"} 
+                      {!isCompiling && <span className="material-symbols-outlined text-sm">chevron_right</span>}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </nav>
 
           <div className="mt-auto border-t border-outline-variant p-4">
-            <button className="flex items-center gap-3 w-full px-3 py-2 text-on-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps text-[11px]">
+            <button 
+              onClick={() => setActiveTab('documentation')}
+              className={`flex items-center gap-3 w-full px-3 py-2 transition-all font-label-caps text-label-caps text-[11px] ${activeTab === 'documentation' ? 'text-neon-blue bg-surface-variant' : 'text-on-surface-variant hover:text-on-surface'}`}>
               <span className="material-symbols-outlined text-sm">menu_book</span>
               Documentation
             </button>
-            <button className="flex items-center gap-3 w-full px-3 py-2 text-on-surface-variant hover:text-on-surface transition-all font-label-caps text-label-caps text-[11px]">
+            <button 
+              onClick={() => setActiveTab('system_status')}
+              className={`flex items-center gap-3 w-full px-3 py-2 transition-all font-label-caps text-label-caps text-[11px] ${activeTab === 'system_status' ? 'text-neon-blue bg-surface-variant' : 'text-on-surface-variant hover:text-on-surface'}`}>
               <span className="material-symbols-outlined text-sm text-success-green">lan</span>
               System Status
             </button>
           </div>
-        </aside>
+          </div>
+        </nav>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col relative bg-slate-950 overflow-hidden">
-          
-          <div className="flex-1 flex flex-row relative overflow-hidden">
-            {/* Canvas Zone */}
-            <section className="flex-1 relative overflow-hidden flex flex-col">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#0f172a_0%,_transparent_100%)] opacity-30 pointer-events-none"></div>
-              
-              {/* Topology Header */}
-              <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-slate-950/60 backdrop-blur-sm border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-neon-blue text-sm">memory</span>
-                  <span className="font-headline-md text-label-caps text-xs tracking-wider">ANALOG MICROCHIP TOPOLOGY</span>
-                </div>
-                {metrics && (
-                  <div className="text-[10px] font-label-caps text-on-surface-variant">{metrics.totalNodes} NODES • {metrics.totalEdges.toLocaleString()} TRACES • ZOOM: 1.0X</div>
-                )}
-              </div>
-
-              {/* React Flow Container */}
-              <div className="w-full h-full relative" style={{ paddingTop: '52px' }}>
-                {result ? (
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    className="bg-transparent"
-                    nodesDraggable={false}
-                    elementsSelectable={false}
-                    edgesFocusable={false}
-                    minZoom={0.05}
-                    maxZoom={2}
-                  >
-                    <Background color="#353436" gap={24} size={1} />
-                    <Controls className="!bg-surface-container !border-outline-variant" showInteractive={false} />
-                    <MiniMap
-                      nodeColor={miniMapNodeColor}
-                      maskColor="rgba(0, 0, 0, 0.7)"
-                      style={{
-                        backgroundColor: '#131315',
-                        border: '1px solid #353436',
-                        borderRadius: '0px',
-                      }}
-                      pannable
-                      zoomable
-                    />
-                  </ReactFlow>
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
-                    <div className="relative mb-6">
-                      <div className="absolute inset-0 bg-neon-blue opacity-5 blur-2xl rounded-full"></div>
-                      <span className="material-symbols-outlined text-on-surface-variant opacity-20 text-[84px]">memory</span>
-                    </div>
-                    <p className="text-on-surface-variant opacity-40 font-label-caps text-label-caps tracking-widest max-w-xs text-center leading-relaxed">
-                        Upload model and test vectors to synthesize analog circuit.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Right Properties Panel */}
-            <aside className="w-64 shrink-0 bg-surface-container-high border-l border-outline-variant flex flex-col z-40 overflow-y-auto">
-              <div className="h-[52px] shrink-0 border-b border-outline-variant flex items-center px-4">
-                <span className="text-label-caps text-on-surface-variant font-bold uppercase tracking-tighter">Properties</span>
-              </div>
-              
-              <div className="p-4 flex-1 flex flex-col">
-                {metrics ? (
-                  <>
-                    <p className="text-label-caps text-[10px] text-on-surface-variant mb-3">CIRCUIT METRICS</p>
-                    <div className="grid grid-cols-2 gap-2 mb-6">
-                      <div className="bg-surface-container-low p-3 border border-slate-800">
-                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">IR NODES</div>
-                        <div className="text-headline-md font-headline-md text-neon-blue">{metrics.totalNodes.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-surface-container-low p-3 border border-slate-800">
-                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">IR EDGES</div>
-                        <div className="text-headline-md font-headline-md text-neon-purple">{metrics.totalEdges.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-surface-container-low p-3 border border-slate-800">
-                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">CONDUCTANCES</div>
-                        <div className="text-headline-md font-headline-md text-on-surface">{metrics.conductances.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-surface-container-low p-3 border border-slate-800">
-                        <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">TIA STAGES</div>
-                        <div className="text-headline-md font-headline-md text-neon-pink">{metrics.tias.toLocaleString()}</div>
-                      </div>
-                    </div>
-
-                    {result && result.validation && (
-                      <>
-                        <p className="text-label-caps text-[10px] text-on-surface-variant mb-3">VALIDATION RESULT</p>
-                        <div className={`p-3 mb-4 border ${result.validation.passed ? 'bg-success-green/10 border-success-green/30 text-success-green' : 'bg-danger-red/10 border-danger-red/30 text-danger-red'} flex items-center gap-3`}>
-                          <span className="material-symbols-outlined text-[20px]">{result.validation.passed ? 'check_circle' : 'cancel'}</span>
-                          <div>
-                            <div className="text-[10px] font-bold font-label-caps">{result.validation.passed ? "PASSED" : "FAILED"}</div>
-                            <div className="text-[9px] opacity-80 font-code-sm">{result.validation.passed ? "Analog synthesis verified" : "Mapping diverged"}</div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 mb-6">
-                          <div className="bg-surface-container-low p-3 border border-slate-800">
-                            <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">MAX ABS ERR</div>
-                            <div className="text-code-sm text-neon-blue">{result.validation.max_abs_error.toExponential(1)}</div>
-                          </div>
-                          <div className="bg-surface-container-low p-3 border border-slate-800">
-                            <div className="text-label-caps text-[9px] text-on-surface-variant mb-1">MAX REL ERR</div>
-                            <div className="text-code-sm text-neon-purple">{result.validation.max_rel_error.toExponential(1)}</div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center">
-                    <span className="material-symbols-outlined text-on-surface-variant opacity-20 text-[40px] mb-4">info</span>
-                    <p className="text-label-caps text-on-surface-variant opacity-50">No component selected</p>
-                  </div>
-                )}
-                
-                <div className="mt-auto w-full border-t border-outline-variant/30 pt-4">
-                  <div className="flex justify-between items-center text-[10px] font-label-caps mb-3">
-                    <span className="text-on-surface-variant/60">Live Synthesis</span>
-                    <div className="w-8 h-4 bg-neon-blue/20 flex items-center justify-end px-0.5">
-                      <div className="w-3 h-3 bg-neon-blue"></div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant">
-                    <span>CPU LOAD</span>
-                    <span className="text-neon-blue">4.2%</span>
-                  </div>
-                  <div className="w-full h-1 bg-surface-variant mt-1 mb-3 overflow-hidden">
-                    <div className="bg-neon-blue h-full" style={{width: '4.2%'}}></div>
-                  </div>
-                  <div className="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant">
-                    <span>VRAM</span>
-                    <span className="text-neon-pink">0.8 GB</span>
-                  </div>
-                  <div className="w-full h-1 bg-surface-variant mt-1 overflow-hidden">
-                    <div className="bg-neon-pink h-full" style={{width: '12%'}}></div>
-                  </div>
-                </div>
-              </div>
-            </aside>
+        <div className="flex-1 flex flex-col relative bg-slate-950 overflow-hidden">
+          <div className="flex-1 flex flex-col relative overflow-hidden">
+            {/* HardwareView is ALWAYS mounted but hidden via display:none to preserve ReactFlow canvas state */}
+            <div className={`flex-1 flex flex-col ${activeTab === 'architecture' ? '' : 'hidden'}`}>
+              <HardwareView isVisible={activeTab === 'architecture'} result={result} nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onNodeDragStart={takeSnapshot} undo={undo} redo={redo} canUndo={past.length > 0} canRedo={future.length > 0} nodeTypes={nodeTypes} edgeTypes={edgeTypes} miniMapNodeColor={miniMapNodeColor} metrics={metrics} terminalRef={terminalRef} onSimulationComplete={(data) => { setSimulationData(data); setActiveTab('simulation'); }} />
+            </div>
+            {activeTab === 'simulation' && <SimulationPanel simulationData={simulationData} setSimulationData={setSimulationData} nodes={nodes} edges={edges} terminalRef={terminalRef} />}
+            {activeTab === 'verification' && <VerificationPanel nodes={nodes} edges={edges} terminalRef={terminalRef} />}
+            {activeTab === 'manufacture' && <ManufacturePanel nodes={nodes} edges={edges} terminalRef={terminalRef} />}
+            {activeTab === 'settings' && <SettingsView settings={settings} setSettings={setSettings} />}
+            {activeTab === 'help' && <HelpView />}
+            {activeTab === 'profile' && <ProfileView />}
+            {activeTab === 'documentation' && <DocumentationView />}
+            {activeTab === 'system_status' && <SystemStatusView />}
           </div>
-
+          
           {/* Analysis Terminal (Bottom) */}
-          <footer className="h-[240px] shrink-0 bg-deep-black border-t border-slate-800 flex flex-col z-50">
-            <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex justify-between items-center shrink-0">
+          {!isTerminalMinimized && (
+            <div
+              onMouseDown={startResizingTerminal}
+              className="h-1.5 w-full bg-outline-variant/30 hover:bg-neon-blue cursor-row-resize z-30 transition-colors"
+            />
+          )}
+          <footer 
+            style={{ height: isTerminalMinimized ? '35px' : `${terminalHeight}px` }}
+            className={`bg-deep-black border-t border-outline-variant flex flex-col shrink-0 z-20 transition-[height] duration-200 ease-in-out ${isTerminalMinimized ? 'overflow-hidden' : ''}`}
+          >
+            <div className="bg-surface-container-low border-b border-outline-variant px-4 py-1.5 flex justify-between items-center">
               <div className="flex gap-4">
-                <button className="text-[10px] font-label-caps text-neon-blue border-b border-neon-blue px-2 py-1">NETLIST</button>
-                <button className="text-[10px] font-label-caps text-on-surface-variant px-2 py-1 hover:text-on-surface transition-colors">SPICE_LOG</button>
+                <button 
+                  onClick={() => setTerminalTab('spice_log')}
+                  className={`text-[10px] font-label-caps px-2 transition-colors ${terminalTab === 'spice_log' ? 'text-neon-blue border-b border-neon-blue' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >SPICE_LOG</button>
+                <button 
+                  onClick={() => setTerminalTab('timing_report')}
+                  className={`text-[10px] font-label-caps px-2 transition-colors ${terminalTab === 'timing_report' ? 'text-neon-blue border-b border-neon-blue' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >TIMING_REPORT</button>
               </div>
               <div className="flex items-center gap-3">
-                {result && result.validation && result.validation.passed && (
-                  <span className="text-[9px] font-label-caps text-success-green">● COMPILATION SUCCESSFUL</span>
-                )}
-                <button className="material-symbols-outlined text-sm text-on-surface-variant hover:text-white">close</button>
+                <span className={`text-[9px] font-label-caps ${isCompiling ? 'text-warning-yellow animate-pulse' : result ? 'text-success-green' : error ? 'text-danger-red' : 'text-on-surface-variant'}`}>
+                  ● {isCompiling ? 'COMPILING...' : result ? 'COMPILATION SUCCESSFUL' : error ? 'COMPILATION FAILED' : 'IDLE'}
+                </span>
+                <button
+                  onClick={() => setIsTerminalMinimized(!isTerminalMinimized)}
+                  className="text-on-surface-variant hover:text-neon-blue transition-colors flex items-center"
+                  title={isTerminalMinimized ? "Expand Terminal" : "Minimize Terminal"}
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    {isTerminalMinimized ? "expand_less" : "expand_more"}
+                  </span>
+                </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-4 font-code-sm text-code-sm text-on-surface-variant selection:bg-neon-blue selection:text-black">
-              {result ? (
-                <pre className="leading-relaxed text-emerald-300/80">{result.netlist}</pre>
-              ) : (
-                <pre className="leading-relaxed">
-<span className="text-neon-blue">** SYNAPSE SPICE NETLIST GENERATOR V3.0 **</span>
-<br/><span className="text-on-surface-variant opacity-40">.param vdd=1.2v</span>
-<br/><span className="text-on-surface-variant opacity-40">.temp 25</span>
-<br/><br/>
-<span className="text-warning-yellow">[WAIT] Awaiting input assets...</span>
-                </pre>
-              )}
+            <div className="flex-1 overflow-hidden p-0 relative">
+              <div className={`absolute inset-0 ${terminalTab === 'spice_log' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+                <Terminal ref={terminalRef} />
+              </div>
+              <div className={`absolute inset-0 overflow-auto p-4 font-code-sm text-xs selection:bg-neon-blue selection:text-black ${terminalTab === 'timing_report' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
+                {timingData ? (
+                  <div className="space-y-2">
+                    <div className="text-neon-purple font-bold border-b border-outline-variant pb-2 mb-4">COMPILATION TIMING REPORT</div>
+                    <div className="flex justify-between max-w-sm"><span className="text-on-surface-variant">Payload Ingestion:</span> <span className="text-neon-blue">{timingData.ingestion_ms.toFixed(2)} ms</span></div>
+                    <div className="flex justify-between max-w-sm"><span className="text-on-surface-variant">Model Deserialization:</span> <span className="text-neon-blue">{timingData.deserialization_ms.toFixed(2)} ms</span></div>
+                    <div className="flex justify-between max-w-sm"><span className="text-on-surface-variant">Hardware Allocation:</span> <span className="text-neon-blue">{timingData.hardware_allocation_ms.toFixed(2)} ms</span></div>
+                    <div className="flex justify-between max-w-sm"><span className="text-on-surface-variant">Graph Synthesis:</span> <span className="text-neon-blue">{timingData.synthesis_ms.toFixed(2)} ms</span></div>
+                    <div className="border-t border-outline-variant/30 mt-2 pt-2 flex justify-between max-w-sm font-bold"><span className="text-on-surface">TOTAL WALL CLOCK:</span> <span className="text-success-green">{timingData.total_ms.toFixed(2)} ms</span></div>
+                    
+                    {result?.metrics && (
+                      <div className="pt-4">
+                        <div className="text-warning-yellow font-bold border-b border-outline-variant pb-2 mb-4 mt-2">ENGINE-SPECIFIC METRICS</div>
+                        {Object.entries(result.metrics).map(([k, v]) => (
+                          <div key={k} className="flex justify-between max-w-sm">
+                            <span className="text-on-surface-variant capitalize">{k.replace(/_/g, ' ')}:</span> 
+                            <span className="text-neon-blue">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-on-surface-variant opacity-50 italic">No timing data available. Run a compilation first.</div>
+                )}
+              </div>
             </div>
           </footer>
-        </main>
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SYNAPSE IDE - Neuromorphic Synthesis Engine</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Geist:wght@400;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#110400",
+                        "slate-900": "#0F172A",
+                        "on-error": "#690005",
+                        "background": "#131315",
+                        "secondary": "#7bd0ff",
+                        "surface-tint": "#c0c6de",
+                        "on-secondary-fixed-variant": "#004c69",
+                        "success-green": "#4ADE80",
+                        "surface-container": "#201f21",
+                        "surface-container-low": "#1b1b1d",
+                        "surface-variant": "#353436",
+                        "primary-fixed-dim": "#c0c6de",
+                        "neon-pink": "#F472B6",
+                        "on-background": "#e5e2e3",
+                        "on-secondary-fixed": "#001e2c",
+                        "neon-purple": "#C084FC",
+                        "surface-container-high": "#2a2a2b",
+                        "primary-container": "#020617",
+                        "neon-blue": "#38BDF8",
+                        "primary": "#c0c6de",
+                        "surface-container-lowest": "#0e0e0f",
+                        "on-primary-fixed": "#151b2d",
+                        "on-primary": "#2a3043",
+                        "danger-red": "#F87171",
+                        "surface-container-highest": "#353436",
+                        "error": "#ffb4ab",
+                        "secondary-fixed-dim": "#7bd0ff",
+                        "tertiary-fixed": "#ffdbc8",
+                        "on-secondary-container": "#00374d",
+                        "on-surface": "#e5e2e3",
+                        "secondary-fixed": "#c4e7ff",
+                        "inverse-on-surface": "#303032",
+                        "on-tertiary-container": "#917260",
+                        "on-tertiary-fixed-variant": "#5b4131",
+                        "outline": "#909097",
+                        "on-secondary": "#00354a",
+                        "surface-dim": "#131315",
+                        "primary-fixed": "#dce1fb",
+                        "on-primary-container": "#72778d",
+                        "on-surface-variant": "#c6c6cd",
+                        "secondary-container": "#00a6e0",
+                        "on-tertiary": "#422b1d",
+                        "surface": "#131315",
+                        "surface-bright": "#39393a",
+                        "tertiary": "#e4bfaa",
+                        "outline-variant": "#46464c",
+                        "on-primary-fixed-variant": "#40465a",
+                        "tertiary-fixed-dim": "#e4bfaa",
+                        "inverse-surface": "#e5e2e3",
+                        "inverse-primary": "#585e73",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#2b170a",
+                        "deep-black": "#000000",
+                        "on-error-container": "#ffdad6",
+                        "warning-yellow": "#FACC15"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0px",
+                        "lg": "0px",
+                        "xl": "0px",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "terminal-height": "240px",
+                        "sidebar-width": "320px",
+                        "panel-padding": "20px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg": ["Geist"],
+                        "headline-md": ["Geist"],
+                        "body-md": ["Geist"],
+                        "code-sm": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["10px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "code-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .canvas-grid {
+            background-image: radial-gradient(circle, #353436 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(56, 189, 248, 0.1);
+            position: absolute;
+            animation: scan 4s linear infinite;
+        }
+        @keyframes scan {
+            from { top: 0; }
+            to { top: 100%; }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md selection:bg-neon-blue selection:text-deep-black overflow-hidden h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-background border-b border-outline-variant flex justify-between items-center w-full px-gutter h-16 shrink-0 z-50">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container border border-neon-blue flex items-center justify-center">
+<span class="material-symbols-outlined text-neon-blue" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div>
+<h1 class="text-headline-lg font-headline-lg font-black text-neon-purple tracking-tighter">SYNAPSE</h1>
+<div class="flex items-center gap-2">
+<p class="text-[10px] text-on-surface-variant font-label-caps uppercase tracking-widest">Neuromorphic Synthesis Engine</p>
+<span class="bg-surface-variant text-neon-blue text-[8px] px-1 font-label-caps">v3.0 MNIST</span>
+</div>
+</div>
+</div>
+<nav class="hidden md:flex items-center ml-12 gap-8 h-full">
+<a class="text-neon-blue border-b-2 border-neon-blue pb-1 font-label-caps text-label-caps h-full flex items-center" href="#">Project</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors px-2 py-1" href="#">Simulate</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors px-2 py-1" href="#">Synthesize</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors px-2 py-1" href="#">Analyze</a>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">help</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden relative">
+<!-- SideNavBar / Explorer -->
+<aside class="flex flex-col w-sidebar-width shrink-0 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant z-40">
+<div class="p-6 border-b border-outline-variant">
+<h3 class="text-label-caps font-bold text-on-surface mb-1">Project Alpha</h3>
+<p class="text-label-caps text-on-surface-variant opacity-60">V3.0 MNIST Engine</p>
+</div>
+<div class="flex-1 overflow-y-auto py-4">
+<div class="px-gutter mb-6">
+<h4 class="text-label-caps text-on-surface-variant mb-4 opacity-50">Upload Assets</h4>
+<div class="space-y-3">
+<div class="border border-dashed border-outline-variant p-4 hover:border-neon-blue transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-neon-blue">database</span>
+<div>
+<p class="text-body-md font-bold text-on-surface">Select model .pt file</p>
+<p class="text-label-caps text-on-surface-variant opacity-60">PyTorch State Dict</p>
+</div>
+</div>
+</div>
+<div class="border border-dashed border-outline-variant p-4 hover:border-neon-blue transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-neon-blue">description</span>
+<div>
+<p class="text-body-md font-bold text-on-surface">Select test vectors .json</p>
+<p class="text-label-caps text-on-surface-variant opacity-60">JSON Array</p>
+</div>
+</div>
+</div>
+<button class="w-full bg-primary-container border border-outline-variant text-primary py-3 font-label-caps text-label-caps hover:bg-surface-variant active:scale-95 transition-all flex items-center justify-center gap-2 group">
+                            Compile to Silicon
+                            <span class="material-symbols-outlined text-xs transition-transform group-hover:translate-x-1">chevron_right</span>
+</button>
+</div>
+</div>
+<nav class="space-y-1 px-2">
+<button class="w-full flex items-center gap-3 px-4 py-3 bg-primary-container text-neon-blue border-l-2 border-neon-blue">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+<span class="text-label-caps font-label-caps">Explorer</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="text-label-caps font-label-caps">Netlist</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">insights</span>
+<span class="text-label-caps font-label-caps">Metrics</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">memory</span>
+<span class="text-label-caps font-label-caps">Hardware</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-label-caps font-label-caps">Logs</span>
+</button>
+</nav>
+</div>
+<div class="mt-auto border-t border-outline-variant py-4 space-y-1 px-2">
+<button class="w-full flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">menu_book</span>
+<span class="text-label-caps font-label-caps">Documentation</span>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">lan</span>
+<span class="text-label-caps font-label-caps">System Status</span>
+</button>
+</div>
+</aside>
+<!-- Main Canvas Area -->
+<main class="flex-1 flex flex-col relative bg-deep-black overflow-hidden">
+<!-- Canvas Header -->
+<div class="h-10 border-b border-outline-variant bg-surface-container flex items-center justify-between px-4 z-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-neon-blue text-[16px]">memory</span>
+<span class="text-label-caps text-on-surface font-bold uppercase tracking-widest">Analog Microchip Topology</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 bg-success-green"></span>
+<span class="text-[9px] text-on-surface-variant font-label-caps uppercase">System Ready</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant"></div>
+<button class="text-on-surface-variant hover:text-neon-blue"><span class="material-symbols-outlined text-[18px]">zoom_in</span></button>
+<button class="text-on-surface-variant hover:text-neon-blue"><span class="material-symbols-outlined text-[18px]">zoom_out</span></button>
+<button class="text-on-surface-variant hover:text-neon-blue"><span class="material-symbols-outlined text-[18px]">fit_screen</span></button>
+</div>
+</div>
+<!-- Drawing Canvas / Empty State -->
+<div class="flex-1 relative canvas-grid">
+<div class="scanline"></div>
+<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+<div class="relative mb-6">
+<div class="absolute inset-0 bg-neon-blue opacity-5 blur-2xl rounded-full"></div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-20 text-[84px]">memory</span>
+</div>
+<p class="text-on-surface-variant opacity-40 font-label-caps text-label-caps tracking-widest max-w-xs text-center leading-relaxed">
+                        Upload model and test vectors to synthesize analog circuit.
+                    </p>
+<div class="mt-8 flex gap-4 opacity-30">
+<div class="w-16 h-px bg-outline-variant"></div>
+<div class="w-1 h-1 bg-neon-blue"></div>
+<div class="w-16 h-px bg-outline-variant"></div>
+</div>
+</div>
+</div>
+<!-- Analysis Terminal -->
+<footer class="h-terminal-height border-t border-outline-variant bg-surface-container-lowest flex flex-col">
+<div class="h-8 border-b border-outline-variant flex items-center justify-between px-4">
+<div class="flex gap-4 h-full">
+<button class="px-3 border-b-2 border-neon-blue text-neon-blue text-[10px] font-label-caps uppercase h-full">Console</button>
+<button class="px-3 text-on-surface-variant text-[10px] font-label-caps uppercase h-full hover:text-on-surface">Synthesis Log</button>
+<button class="px-3 text-on-surface-variant text-[10px] font-label-caps uppercase h-full hover:text-on-surface">Memory Profile</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:text-danger-red"><span class="material-symbols-outlined text-[14px]">block</span></button>
+<button class="text-on-surface-variant hover:text-neon-blue"><span class="material-symbols-outlined text-[14px]">download</span></button>
+</div>
+</div>
+<div class="flex-1 p-4 font-label-caps text-code-sm text-on-surface-variant overflow-y-auto bg-deep-black/50">
+<div class="flex gap-4 mb-2">
+<span class="text-neon-pink">12:04:31</span>
+<span class="text-success-green">[INIT]</span>
+<span>Synapse Kernel 3.0.2-alpha loaded successfully.</span>
+</div>
+<div class="flex gap-4 mb-2">
+<span class="text-neon-pink">12:04:32</span>
+<span class="text-warning-yellow">[WAIT]</span>
+<span>Awaiting input assets... No .pt model detected in /workspace/models/</span>
+</div>
+<div class="flex gap-4 items-center">
+<span class="text-neon-blue">&gt;</span>
+<span class="animate-pulse w-2 h-4 bg-neon-blue"></span>
+</div>
+</div>
+</footer>
+</main>
+<!-- Right Properties Panel -->
+<aside class="w-64 shrink-0 bg-surface-container-high border-l border-outline-variant flex flex-col z-40">
+<div class="h-10 border-b border-outline-variant flex items-center px-4">
+<span class="text-label-caps text-on-surface-variant font-bold uppercase tracking-tighter">Properties</span>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center p-8 text-center">
+<span class="material-symbols-outlined text-on-surface-variant opacity-20 text-[40px] mb-4">info</span>
+<p class="text-label-caps text-on-surface-variant opacity-50">No component selected</p>
+<div class="mt-6 w-full border-t border-outline-variant/30 pt-6">
+<p class="text-[9px] text-on-surface-variant/40 font-label-caps uppercase text-left mb-4">Quick Config</p>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-[10px] font-label-caps">
+<span class="text-on-surface-variant/60">Auto-Save</span>
+<div class="w-8 h-4 bg-surface-variant flex items-center px-0.5">
+<div class="w-3 h-3 bg-on-surface-variant"></div>
+</div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-label-caps">
+<span class="text-on-surface-variant/60">Live Synthesis</span>
+<div class="w-8 h-4 bg-neon-blue/20 flex items-center justify-end px-0.5">
+<div class="w-3 h-3 bg-neon-blue"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-auto p-4 border-t border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant">
+<span>CPU LOAD</span>
+<span class="text-neon-blue">4.2%</span>
+</div>
+<div class="w-full h-1 bg-surface-variant mt-1 overflow-hidden">
+<div class="bg-neon-blue h-full" style="width: 4.2%"></div>
+</div>
+<div class="flex items-center justify-between text-[9px] font-label-caps text-on-surface-variant mt-3">
+<span>VRAM</span>
+<span class="text-neon-pink">0.8 GB</span>
+</div>
+<div class="w-full h-1 bg-surface-variant mt-1 overflow-hidden">
+<div class="bg-neon-pink h-full" style="width: 12%"></div>
+</div>
+</div>
+</aside>
+</div>
+<!-- UI Interaction Scripts -->
+<script>
+        // Micro-interactions for tooltips or state changes
+        document.querySelectorAll('button, .cursor-pointer').forEach(el => {
+            el.addEventListener('mousedown', () => {
+                el.style.transform = 'scale(0.98)';
+            });
+            el.addEventListener('mouseup', () => {
+                el.style.transform = 'scale(1)';
+            });
+        });
+
+        // Atmospheric terminal effect
+        const cursor = document.querySelector('.animate-pulse');
+        setInterval(() => {
+            if(cursor) {
+                cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0';
+            }
+        }, 500);
+    </script>
+</body></html>

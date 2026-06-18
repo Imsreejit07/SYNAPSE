@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SYNAPSE | Circuit Performance Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Geist:wght@400;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#110400",
+                        "slate-900": "#0F172A",
+                        "on-error": "#690005",
+                        "background": "#131315",
+                        "secondary": "#7bd0ff",
+                        "surface-tint": "#c0c6de",
+                        "on-secondary-fixed-variant": "#004c69",
+                        "success-green": "#4ADE80",
+                        "surface-container": "#201f21",
+                        "surface-container-low": "#1b1b1d",
+                        "surface-variant": "#353436",
+                        "primary-fixed-dim": "#c0c6de",
+                        "neon-pink": "#F472B6",
+                        "on-background": "#e5e2e3",
+                        "on-secondary-fixed": "#001e2c",
+                        "neon-purple": "#C084FC",
+                        "surface-container-high": "#2a2a2b",
+                        "primary-container": "#020617",
+                        "neon-blue": "#38BDF8",
+                        "primary": "#c0c6de",
+                        "surface-container-lowest": "#0e0e0f",
+                        "on-primary-fixed": "#151b2d",
+                        "on-primary": "#2a3043",
+                        "danger-red": "#F87171",
+                        "surface-container-highest": "#353436",
+                        "error": "#ffb4ab",
+                        "secondary-fixed-dim": "#7bd0ff",
+                        "tertiary-fixed": "#ffdbc8",
+                        "on-secondary-container": "#00374d",
+                        "on-surface": "#e5e2e3",
+                        "secondary-fixed": "#c4e7ff",
+                        "inverse-on-surface": "#303032",
+                        "on-tertiary-container": "#917260",
+                        "on-tertiary-fixed-variant": "#5b4131",
+                        "outline": "#909097",
+                        "on-secondary": "#00354a",
+                        "surface-dim": "#131315",
+                        "primary-fixed": "#dce1fb",
+                        "on-primary-container": "#72778d",
+                        "on-surface-variant": "#c6c6cd",
+                        "secondary-container": "#00a6e0",
+                        "on-tertiary": "#422b1d",
+                        "surface": "#131315",
+                        "surface-bright": "#39393a",
+                        "tertiary": "#e4bfaa",
+                        "outline-variant": "#46464c",
+                        "on-primary-fixed-variant": "#40465a",
+                        "tertiary-fixed-dim": "#e4bfaa",
+                        "inverse-surface": "#e5e2e3",
+                        "inverse-primary": "#585e73",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#2b170a",
+                        "deep-black": "#000000",
+                        "on-error-container": "#ffdad6",
+                        "warning-yellow": "#FACC15"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0px",
+                        "lg": "0px",
+                        "xl": "0px",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "terminal-height": "240px",
+                        "sidebar-width": "320px",
+                        "panel-padding": "20px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg": ["Geist"],
+                        "headline-md": ["Geist"],
+                        "body-md": ["Geist"],
+                        "code-sm": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["10px", {"lineHeight": "12px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "code-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #020617;
+            background-image: radial-gradient(#1e293b 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            color: #e5e2e3;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #353436; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #38BDF8; }
+        
+        .terminal-cursor::after {
+            content: '_';
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .node-pulse {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #38BDF8); }
+            50% { opacity: 0.7; filter: drop-shadow(0 0 8px #38BDF8); }
+        }
+    </style>
+</head>
+<body class="font-body-md overflow-hidden h-screen flex flex-col">
+<!-- Top AppBar Implementation -->
+<header class="flex justify-between items-center w-full px-gutter h-16 bg-background dark:bg-background border-b border-outline-variant fixed top-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-headline-lg font-headline-lg font-black text-neon-purple tracking-tighter">SYNAPSE</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-neon-blue border-b-2 border-neon-blue pb-1 font-label-caps text-label-caps" href="#">PROJECT</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors" href="#">SIMULATE</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors" href="#">SYNTHESIZE</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:bg-surface-variant hover:text-neon-blue transition-colors" href="#">ANALYZE</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-on-surface-variant">settings</span></button>
+<button class="p-2 hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-on-surface-variant">help</span></button>
+<button class="p-2 hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-neon-blue">account_circle</span></button>
+</div>
+</header>
+<div class="flex flex-1 pt-16 h-full">
+<!-- SideNavBar Implementation -->
+<aside class="flex flex-col w-sidebar-width fixed left-0 top-16 bottom-0 z-40 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant overflow-y-auto custom-scrollbar">
+<div class="p-6 border-b border-outline-variant">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 bg-neon-purple/20 flex items-center justify-center border border-neon-purple/50">
+<span class="material-symbols-outlined text-neon-purple">memory</span>
+</div>
+<div>
+<div class="text-label-caps font-bold text-on-surface">Project Alpha</div>
+<div class="text-xs text-on-surface-variant">V3.0 MNIST Engine</div>
+</div>
+</div>
+<button class="w-full bg-neon-blue text-deep-black font-label-caps py-3 text-label-caps hover:bg-neon-blue/90 active:scale-95 duration-75 flex items-center justify-center gap-2">
+                    COMPILE TO SILICON <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<nav class="flex-1 py-4">
+<div class="px-4 py-2 text-[10px] text-on-surface-variant/50 font-label-caps uppercase tracking-widest mb-2">Navigation</div>
+<div class="space-y-1">
+<button class="flex items-center w-full px-6 py-3 gap-4 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="text-label-caps">Explorer</span>
+</button>
+<button class="flex items-center w-full px-6 py-3 gap-4 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="text-label-caps">Netlist</span>
+</button>
+<button class="flex items-center w-full px-6 py-3 gap-4 bg-primary-container text-neon-blue border-l-2 border-neon-blue transition-colors">
+<span class="material-symbols-outlined">insights</span>
+<span class="text-label-caps">Metrics</span>
+</button>
+<button class="flex items-center w-full px-6 py-3 gap-4 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">memory</span>
+<span class="text-label-caps">Hardware</span>
+</button>
+<button class="flex items-center w-full px-6 py-3 gap-4 text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-label-caps">Logs</span>
+</button>
+</div>
+</nav>
+<div class="mt-auto border-t border-outline-variant p-4 space-y-2">
+<button class="flex items-center w-full px-4 py-2 gap-3 text-on-surface-variant hover:bg-surface-variant text-label-caps">
+<span class="material-symbols-outlined text-sm">menu_book</span> Documentation
+                </button>
+<button class="flex items-center w-full px-4 py-2 gap-3 text-on-surface-variant hover:bg-surface-variant text-label-caps">
+<span class="material-symbols-outlined text-sm text-success-green">lan</span> System Status
+                </button>
+</div>
+</aside>
+<!-- Main Content Canvas Area -->
+<main class="ml-sidebar-width flex-1 flex flex-col relative">
+<div class="flex-1 flex flex-row overflow-hidden">
+<!-- Left Control Panel: Circuit Metrics & Validation -->
+<div class="w-96 flex flex-col border-r border-outline-variant bg-surface-container-lowest p-6 overflow-y-auto custom-scrollbar gap-6">
+<!-- Section: Circuit Metrics -->
+<section class="space-y-4">
+<div class="flex items-center gap-2 border-b border-outline-variant pb-2">
+<span class="material-symbols-outlined text-neon-blue" style="font-variation-settings: 'FILL' 1;">developer_board</span>
+<h2 class="text-headline-md font-headline-md text-on-surface">Circuit Metrics</h2>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container p-4 border border-outline-variant hover:border-neon-blue transition-colors group">
+<div class="flex justify-between mb-1">
+<span class="material-symbols-outlined text-neon-blue text-sm">database</span>
+<span class="text-[10px] font-label-caps text-on-surface-variant">IR NODES</span>
+</div>
+<div class="text-headline-md font-headline-md">257</div>
+</div>
+<div class="bg-surface-container p-4 border border-outline-variant hover:border-neon-purple transition-colors">
+<div class="flex justify-between mb-1">
+<span class="material-symbols-outlined text-neon-purple text-sm">hub</span>
+<span class="text-[10px] font-label-caps text-on-surface-variant">IR EDGES</span>
+</div>
+<div class="text-headline-md font-headline-md">2,484</div>
+</div>
+<div class="bg-surface-container p-4 border border-outline-variant hover:border-neon-pink transition-colors">
+<div class="flex justify-between mb-1">
+<span class="material-symbols-outlined text-neon-pink text-sm">bolt</span>
+<span class="text-[10px] font-label-caps text-on-surface-variant">CONDUCTANCES</span>
+</div>
+<div class="text-headline-md font-headline-md">2,410</div>
+</div>
+<div class="bg-surface-container p-4 border border-outline-variant hover:border-warning-yellow transition-colors">
+<div class="flex justify-between mb-1">
+<span class="material-symbols-outlined text-warning-yellow text-sm">waves</span>
+<span class="text-[10px] font-label-caps text-on-surface-variant">TIA STAGES</span>
+</div>
+<div class="text-headline-md font-headline-md">42</div>
+</div>
+</div>
+<div class="bg-primary-container p-3 border border-neon-blue/20">
+<div class="text-[10px] font-label-caps text-on-primary-container mb-1">ANALOG ARCHITECTURE</div>
+<div class="text-xs font-code-sm leading-relaxed">
+<span class="text-neon-blue">96</span> Voltage Rails → <span class="text-warning-yellow">32</span> Rectifiers → <span class="text-neon-pink">42</span> Classifiers
+                            </div>
+</div>
+</section>
+<!-- Section: Validation Result -->
+<section class="space-y-4">
+<div class="flex items-center gap-2 border-b border-outline-variant pb-2">
+<span class="material-symbols-outlined text-success-green">verified</span>
+<h2 class="text-headline-md font-headline-md text-on-surface">Validation Result</h2>
+</div>
+<div class="bg-success-green/10 border border-success-green/30 p-4 flex items-start gap-4">
+<div class="w-10 h-10 rounded-full bg-success-green/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-success-green" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<div class="text-body-md font-bold text-success-green">Compilation Passed</div>
+<div class="text-xs text-on-surface-variant">Analog ReLU synthesis verified.</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container p-4 border border-outline-variant">
+<div class="text-[10px] font-label-caps text-on-surface-variant mb-1">MAX ABS ERROR</div>
+<div class="text-headline-md font-code-sm text-neon-blue">7.11e-15</div>
+</div>
+<div class="bg-surface-container p-4 border border-outline-variant">
+<div class="text-[10px] font-label-caps text-on-surface-variant mb-1">MAX REL ERROR</div>
+<div class="text-headline-md font-code-sm text-neon-purple">6.87e-15</div>
+</div>
+</div>
+<div class="bg-surface-container p-4 border border-outline-variant flex-1 overflow-hidden flex flex-col">
+<div class="text-[10px] font-label-caps text-on-surface-variant mb-3 border-b border-outline-variant pb-1">OUTPUT VECTOR VALIDATION</div>
+<div class="font-code-sm text-[11px] space-y-1 h-64 overflow-y-auto custom-scrollbar pr-2">
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV0[0]</span> <span class="text-on-surface-variant/60">err: 8.9e-16</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV0[5]</span> <span class="text-on-surface-variant/60">err: 1.8e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV1[0]</span> <span class="text-on-surface-variant/60">err: 1.8e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV1[5]</span> <span class="text-on-surface-variant/60">err: 1.8e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV2[0]</span> <span class="text-on-surface-variant/60">err: 4.4e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV2[5]</span> <span class="text-on-surface-variant/60">err: 5.3e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV3[0]</span> <span class="text-on-surface-variant/60">err: 6.2e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV3[5]</span> <span class="text-on-surface-variant/60">err: 2.1e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV4[0]</span> <span class="text-on-surface-variant/60">err: 3.8e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV4[5]</span> <span class="text-on-surface-variant/60">err: 9.9e-16</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV5[0]</span> <span class="text-on-surface-variant/60">err: 1.2e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV5[5]</span> <span class="text-on-surface-variant/60">err: 4.6e-15</span>
+</div>
+<div class="flex justify-between items-center text-success-green/80">
+<span>[✓] TV6[0]</span> <span class="text-on-surface-variant/60">err: 7.3e-15</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Center Canvas: Topology Graph View -->
+<div class="flex-1 bg-deep-black relative overflow-hidden">
+<!-- Microgrid pattern -->
+<div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: linear-gradient(#475569 1px, transparent 1px), linear-gradient(90deg, #475569 1px, transparent 1px); background-size: 40px 40px;">
+</div>
+<!-- Schematic / Flow Visualization (Simulated) -->
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-full h-full p-20 flex justify-center gap-24 items-center">
+<!-- Simulated Layer 1 -->
+<div class="flex flex-col gap-4">
+<div class="w-3 h-3 bg-neon-blue node-pulse"></div>
+<div class="w-3 h-3 bg-neon-blue node-pulse" style="animation-delay: 0.2s"></div>
+<div class="w-3 h-3 bg-neon-blue node-pulse" style="animation-delay: 0.4s"></div>
+<div class="w-3 h-3 bg-neon-blue node-pulse" style="animation-delay: 0.6s"></div>
+<div class="w-3 h-3 bg-neon-blue node-pulse" style="animation-delay: 0.8s"></div>
+</div>
+<!-- Connector Lines -->
+<div class="relative w-48 h-64 border-y border-outline-variant/30">
+<div class="absolute top-0 bottom-0 left-0 w-full bg-gradient-to-r from-neon-blue/20 to-neon-purple/20"></div>
+<div class="absolute top-1/2 left-0 w-full h-[1px] bg-neon-blue opacity-50"></div>
+<div class="absolute top-1/3 left-0 w-full h-[1px] bg-neon-blue opacity-30"></div>
+<div class="absolute top-2/3 left-0 w-full h-[1px] bg-neon-blue opacity-30"></div>
+</div>
+<!-- Simulated Layer 2 -->
+<div class="flex flex-col gap-8">
+<div class="w-4 h-4 border border-neon-purple node-pulse" style="animation-delay: 1s"></div>
+<div class="w-4 h-4 border border-neon-purple node-pulse" style="animation-delay: 1.2s"></div>
+<div class="w-4 h-4 border border-neon-purple node-pulse" style="animation-delay: 1.4s"></div>
+</div>
+</div>
+</div>
+<!-- Topology Controls -->
+<div class="absolute bottom-6 left-6 flex bg-surface-container border border-outline-variant p-1">
+<button class="p-2 hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-sm">add</span></button>
+<button class="p-2 hover:bg-surface-variant transition-colors border-l border-outline-variant"><span class="material-symbols-outlined text-sm">remove</span></button>
+<button class="p-2 hover:bg-surface-variant transition-colors border-l border-outline-variant"><span class="material-symbols-outlined text-sm">fullscreen</span></button>
+</div>
+<!-- Mini-map / Radar View -->
+<div class="absolute bottom-6 right-6 w-48 h-32 bg-slate-900 border border-outline-variant overflow-hidden p-2">
+<div class="w-full h-full bg-deep-black relative border border-outline-variant/20">
+<div class="absolute top-4 left-4 w-12 h-1 bg-neon-blue/30"></div>
+<div class="absolute top-10 left-4 w-12 h-1 bg-neon-purple/30"></div>
+<div class="absolute inset-0 border border-neon-blue opacity-30 m-2"></div>
+</div>
+<div class="absolute bottom-1 right-1 text-[8px] font-label-caps text-on-surface-variant">MINIMAP</div>
+</div>
+</div>
+</div>
+<!-- Analysis Terminal (Bottom) -->
+<div class="h-terminal-height bg-surface-container-lowest border-t border-outline-variant flex flex-col">
+<div class="flex items-center justify-between px-gutter py-2 border-b border-outline-variant">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-neon-blue">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+<span class="text-label-caps text-[11px] font-bold">SPICE Netlist</span>
+<span class="text-[10px] text-on-surface-variant font-code-sm">(2675 lines)</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant text-[10px] font-label-caps">
+<button class="hover:text-neon-blue transition-colors">ERRORS (0)</button>
+<button class="hover:text-warning-yellow transition-colors">WARNINGS (3)</button>
+<button class="hover:text-neon-pink transition-colors">TIMING</button>
+</div>
+</div>
+<button class="flex items-center gap-1 text-[10px] font-label-caps text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-sm">content_copy</span> COPY
+                    </button>
+</div>
+<div class="flex-1 overflow-y-auto p-4 font-code-sm text-[12px] custom-scrollbar bg-deep-black/50">
+<div class="text-on-surface-variant/60">* SYNAPSE idealized netlist</div>
+<div class="text-on-surface-variant/60">* Generated from nn.Sequential with Linear + ReLU stack</div>
+<div class="text-on-surface-variant/60">* alpha_v=1.0 beta_s=1e-06 rf_ohm=1000000.0</div>
+<div class="mt-4 text-neon-purple">* Layer 0</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-1">
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">001</span>
+<span class="text-neon-blue">V_IN_0_0</span> IN_0_0 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">002</span>
+<span class="text-neon-blue">V_IN_0_1</span> IN_0_1 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">003</span>
+<span class="text-neon-blue">V_IN_0_2</span> IN_0_2 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">004</span>
+<span class="text-neon-blue">V_IN_0_3</span> IN_0_3 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">005</span>
+<span class="text-neon-blue">V_IN_0_4</span> IN_0_4 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">006</span>
+<span class="text-neon-blue">V_IN_0_5</span> IN_0_5 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">007</span>
+<span class="text-neon-blue">V_IN_0_6</span> IN_0_6 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">008</span>
+<span class="text-neon-blue">V_IN_0_7</span> IN_0_7 0 DC 0
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">009</span>
+<span class="text-neon-blue">V_IN_1_0</span> IN_1_0 0 DC 0.23
+                        </div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40">010</span>
+<span class="text-neon-blue">V_IN_1_1</span> IN_1_1 0 DC -0.15
+                        </div>
+</div>
+<div class="mt-4 text-neon-purple">* Conductance Matrix [G0]</div>
+<div class="text-on-surface-variant/80">R_G0_0_0 IN_0_0 OUT_0_0 4.12k</div>
+<div class="text-on-surface-variant/80">R_G0_0_1 IN_0_1 OUT_0_0 2.88k</div>
+<div class="text-on-surface-variant/80">R_G0_0_2 IN_0_2 OUT_0_0 1.95k</div>
+<div class="text-success-green/80 mt-2">Analysis Complete. Terminal Ready. <span class="terminal-cursor text-neon-blue"></span></div>
+</div>
+<!-- Status Bar -->
+<div class="h-6 bg-slate-900 flex items-center justify-between px-4 border-t border-outline-variant">
+<div class="flex items-center gap-4 text-[9px] font-label-caps text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-success-green"></span> SIM_STABLE</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[10px]">timer</span> 12.4ms</span>
+<span>NODE_ID: 0x4f22</span>
+</div>
+<div class="text-[9px] font-label-caps text-on-surface-variant">UTF-8 | SPICE-III | LN 42, COL 18</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Floating Action Component (Only shown in Analysis if specific interaction required) -->
+<div class="fixed bottom-28 right-8 z-50">
+<button class="group relative">
+<div class="absolute -inset-1 bg-neon-blue blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
+<div class="relative w-14 h-14 bg-deep-black border border-neon-blue flex items-center justify-center text-neon-blue hover:bg-neon-blue hover:text-deep-black transition-all">
+<span class="material-symbols-outlined">play_arrow</span>
+</div>
+</button>
+</div>
+<script>
+        // Micro-interaction for the terminal output (simulating new lines)
+        const terminalOutput = document.querySelector('.custom-scrollbar');
+        let lineCount = 11;
+        
+        function addTerminalLine() {
+            const lines = [
+                "UPDATE: Bias voltage normalization check passed.",
+                "INFO: Synaptic weights re-indexed for matrix optimization.",
+                "TRC: Node 257 response time: 0.002ns",
+                "WRN: High current density detected at Gate 0x4"
+            ];
+            const newLine = document.createElement('div');
+            newLine.className = 'flex gap-4 opacity-0 transition-opacity duration-500';
+            const randomColor = Math.random() > 0.8 ? 'text-warning-yellow' : 'text-on-surface-variant/80';
+            newLine.innerHTML = `<span class="text-on-surface-variant/40">0${lineCount++}</span> <span class="${randomColor}">${lines[Math.floor(Math.random()*lines.length)]}</span>`;
+            
+            // terminalOutput.appendChild(newLine);
+            // setTimeout(() => newLine.classList.replace('opacity-0', 'opacity-100'), 50);
+        }
+
+        // setInterval(addTerminalLine, 5000);
+    </script>
+</body></html>

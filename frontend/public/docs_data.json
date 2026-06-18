@@ -1,0 +1,33 @@
+{
+  "getting_started": {
+    "title": "Getting Started",
+    "content": "The SYNAPSE engine bridges the gap between deep learning and analog circuit design.\nUpload your PyTorch `.pt` models and instantly synthesize them into ready-to-manufacture resistive crossbar architectures.",
+    "code": "# 1. Initialize your model\nimport torch\nfrom synapse import Compiler\n\n# 2. Compile to analog SPICE\ncompiler = Compiler(target='ANALOG_V3')\nnetlist = compiler.synthesize(model='mnist_model.pt')\n\n# 3. Export to fabrication\nnetlist.export_gds()"
+  },
+  "architecture": {
+    "title": "Architecture & Scope",
+    "content": "SYNAPSE: Neuromorphic Synthesis Engine\n\nReference implementation for the MVP described in the PRD.\n\nScope:\n- Parse a restricted PyTorch nn.Sequential state_dict containing nn.Linear\n  and nn.ReLU layers.\n- Map linear weights/biases into an idealized differential conductance IR.\n- Map ReLU activations to precision half-wave rectifier (RECTIFIER) nodes.\n- Export a SPICE-like netlist text representation.\n- Perform closed-form validation against PyTorch forward outputs.\n- Optionally emit the IR as JSON for visualization/UI consumers.\n\nThis compiler supports Linear + ReLU stacks with non-contiguous state_dict\nindices (ReLU layers have no parameters and are inferred from index gaps).\nIt is a compiler for a symbolic analog abstraction, not a fabrication-grade\nhardware tool."
+  },
+  "spice_syntax": {
+    "title": "SPICE Primitives",
+    "content": "The SYNAPSE NetlistExporter automatically emits the following SPICE primitives during compilation to map the abstract IR into silicon-ready macros:",
+    "primitives": [
+      {
+        "command": "V_SOURCE",
+        "desc": "Ideal DC voltage source for input activation and references."
+      },
+      {
+        "command": "E_TIA",
+        "desc": "Voltage Controlled Voltage Source acting as Transimpedance Amplifier."
+      },
+      {
+        "command": "R_CROSSBAR",
+        "desc": "Ohmic resistance mapping for positive/negative weights and biases."
+      },
+      {
+        "command": "E_RELU",
+        "desc": "Behavioral precision half-wave rectifier for non-linear activations."
+      }
+    ]
+  }
+}
