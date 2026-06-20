@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import { useReactFlow } from '@xyflow/react';
+import { getLayoutedElementsAsync } from '../../utils/layoutUtils';
 
-export default function NetlistImporter({ setNodes, setEdges, terminalRef }) {
+export default function NetlistImporter({ setNodes, setEdges, terminalRef, setIsCalculating }) {
   const [text, setText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const { fitView } = useReactFlow();
 
   const handleImport = async () => {
     if (!text.trim()) return;
@@ -22,8 +25,62 @@ export default function NetlistImporter({ setNodes, setEdges, terminalRef }) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       
       const data = await res.json();
-      setNodes(data.nodes || []);
-      setEdges(data.edges || []);
+      const rawNodes = data.nodes || [];
+      const rawEdges = data.edges || [];
+
+      // 1. Hierarchical Nesting: Group Nodes by Layer
+      const layerSet = new Set();
+      rawNodes.forEach(node => {
+        // Find hardware trace format like "JUNCT_0_1_POS" or "IN_2_0"
+        const match = node.id.match(/^[A-Z]+_(\d+)/);
+        if (match) {
+          const layerId = `LAYER_${match[1]}`;
+          layerSet.add(layerId);
+          node.parentNode = layerId;
+          node.extent = 'parent'; // Lock to parent bounding box
+        }
+      });
+
+      const groupNodes = Array.from(layerSet).map(layerId => ({
+        id: layerId,
+        type: 'group',
+        position: { x: 0, y: 0 },
+        data: { label: `${layerId}_COMPUTE_BLOCK` },
+        style: { 
+          backgroundColor: 'rgba(6, 182, 212, 0.05)',
+          border: '1px dashed rgba(6, 182, 212, 0.3)',
+          borderRadius: '8px'
+        }
+      }));
+
+      const hierarchicalNodes = [...groupNodes, ...rawNodes];
+
+      setIsCalculating(true);
+      const { nodes: layoutedNodes, edges: layoutedEdges } = await getLayoutedElementsAsync(hierarchicalNodes, rawEdges);
+      
+      const isMassive = layoutedEdges.length > 100;
+      const finalEdges = layoutedEdges.map((edge) => {
+        return {
+          ...edge,
+          type: 'smoothstep',
+          hidden: isMassive, // Completely hide edges for massive graphs
+          animated: false,
+          zIndex: isMassive ? -1 : 0,
+          style: { 
+            stroke: isMassive ? 'url(#bus-gradient)' : '#06b6d4',
+            strokeWidth: isMassive ? 0.5 : 1,
+            fill: 'none',
+            strokeOpacity: isMassive ? 0.1 : 0.8,
+            pointerEvents: isMassive ? 'none' : 'auto'
+          }
+        };
+      });
+
+      setNodes(layoutedNodes);
+      setEdges(finalEdges);
+      setIsCalculating(false);
+      
+      setTimeout(() => fitView({ padding: 0.2, duration: 800 }), 300);
       
       if (terminalRef?.current) {
         terminalRef.current.write(`\x1b[1;32m[IMPORT SUCCESS] Netlist parsed. Canvas populated.\x1b[0m\r\n`);
@@ -38,7 +95,7 @@ export default function NetlistImporter({ setNodes, setEdges, terminalRef }) {
   };
 
   return (
-    <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden mt-4">
+    <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden">
       <div className="relative z-10">
         <div className="flex items-center gap-2 mb-2">
           <span className="material-symbols-outlined text-neon-blue text-lg">code_blocks</span>
@@ -54,7 +111,7 @@ export default function NetlistImporter({ setNodes, setEdges, terminalRef }) {
         <button
           onClick={handleImport}
           disabled={isImporting || !text.trim()}
-          className="w-full bg-neon-blue py-2.5 text-black font-label-caps text-xs hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full bg-[#114b5f] hover:bg-[#1a6580] text-cyan-200 border border-cyan-600 font-mono text-[11px] font-bold py-3 px-4 rounded transition-all uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2 shadow-[inset_0_0_10px_rgba(8,145,178,0.2)]"
         >
           {isImporting ? 'IMPORTING...' : 'IMPORT & DRAW CIRCUIT'}
         </button>

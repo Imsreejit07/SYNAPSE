@@ -52,6 +52,11 @@ The backend exposes the SYNAPSE engine via a stateless RESTful interface, built 
 - Built on ASGI (Uvicorn), allowing asynchronous request handling.
 - Implements `ORJSONResponse` for ultra-fast JSON serialization, crucial when handling large graphs (like the MNIST architecture).
 
+### 3.3 Workspace Persistence (SQLite)
+- A zero-cost, serverless SQLite database (`synapse_workspaces.db`) is integrated directly into the FastAPI instance.
+- It provides non-volatile storage for custom ReactFlow hardware layouts.
+- **Endpoints**: `POST /api/v1/workspace/save` and `GET /api/v1/workspace/load/{user_id}` allow rapid upserting and retrieval of heavily serialized node/edge JSON structures keyed exclusively to authenticated User IDs.
+
 ---
 
 ## 4. Frontend Visualizer (React + Vite)
@@ -72,6 +77,11 @@ The frontend provides a real-time, interactive debugging and visualization suite
 - **Left Panel (Controls):** File upload zones for `.pt` and `.json` test vectors. Contains the "Compile to Hardware" trigger button.
 - **Center Canvas (Graph):** The interactive React Flow canvas allowing pan, zoom, and node inspection.
 - **Right Panel (Netlist):** A real-time updating code block displaying the raw output netlist, mimicking an EDA (Electronic Design Automation) tool interface.
+
+### 4.4 Authentication & Security
+- The primary EDA workspace is completely secured behind a B2B enterprise authentication wall powered by **Clerk** (`@clerk/clerk-react`).
+- The application utilizes a hard-enforced `<SignedIn>` gate, preventing unauthenticated access to the physical canvas.
+- Clerk UUIDs are securely funneled into the backend architecture to maintain isolated user cloud-save vaults.
 
 ---
 

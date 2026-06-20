@@ -1,5 +1,5 @@
 import React from 'react';
-import { useReactFlow } from '@xyflow/react';
+import { useReactFlow, Handle, Position } from '@xyflow/react';
 
 export default function DigitalGateNode({ id, data }) {
   const { setNodes, setEdges } = useReactFlow();
@@ -21,6 +21,7 @@ export default function DigitalGateNode({ id, data }) {
 
   return (
     <div className={`border-2 rounded-none min-w-[120px] bg-slate-950 font-mono ${heatmapColor} relative`}>
+      <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-cyan-400 !border-slate-800" />
       <button 
         onPointerDown={handleDelete} 
         className="nodrag absolute -top-2 -right-2 bg-slate-900 border border-slate-700 text-slate-400 hover:text-red-500 rounded-full w-4 h-4 flex items-center justify-center transition-colors"
@@ -50,6 +51,7 @@ export default function DigitalGateNode({ id, data }) {
           </div>
         </div>
       </div>
+      <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-neon-purple !border-slate-800" />
     </div>
   );
 }

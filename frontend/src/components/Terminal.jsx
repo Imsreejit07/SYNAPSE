@@ -50,13 +50,21 @@ const Terminal = forwardRef((props, ref) => {
     
     // Fit must be called after a slight delay to ensure DOM is ready in flex containers
     setTimeout(() => {
-      fitAddon.fit();
+      try {
+        if (terminalRef.current && terminalRef.current.clientWidth > 0) {
+          fitAddon.fit();
+        }
+      } catch (e) {}
     }, 10);
 
     xtermInstance.current = term;
 
     const handleResize = () => {
-      fitAddon.fit();
+      try {
+        if (terminalRef.current && terminalRef.current.clientWidth > 0) {
+          fitAddon.fit();
+        }
+      } catch (e) {}
     };
     window.addEventListener('resize', handleResize);
 

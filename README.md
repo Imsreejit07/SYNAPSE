@@ -1,269 +1,155 @@
-<div align="center">
+# SYNAPSE EDA — Neuromorphic Hardware Design Automation Platform
 
-# SYNAPSE
-
-### Neuromorphic Synthesis Engine
-
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0+-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
-
-**A deterministic algorithmic compiler that translates PyTorch digital neural networks into physical, analog circuit netlists.**
-
-*SYNAPSE bridges the gap between digital machine learning and analog neuromorphic hardware by compiling trained neural network weights into SPICE-compatible circuit descriptions that can be fabricated on physical silicon.*
+> A browser-based Electronic Design Automation (EDA) tool for analog/digital microchip topology design, compiled from PyTorch neural network models into physical circuit representations.
 
 ---
 
-[Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Architecture](#-architecture) · [Deployment](#-deployment) · [API Reference](#-api-reference)
+## Architecture Overview
 
-</div>
+```
+┌──────────────┐     WebSocket      ┌──────────────────┐
+│   Frontend   │ ◄────────────────► │  FastAPI Backend  │
+│  React 19 +  │     REST API       │  (server.py)      │
+│  ReactFlow   │ ◄────────────────► │  Uvicorn + ASGI   │
+└──────┬───────┘                    └────────┬─────────┘
+       │                                      │
+       ▼                                      ▼
+┌──────────────┐                    ┌──────────────────┐
+│  Vite 8 Dev  │                    │ SynapseCompiler  │
+│  TailwindCSS │                    │ PyTorch Runtime  │
+│    Recharts  │                    │ SQLite (persist)  │
+└──────────────┘                    └──────────────────┘
+```
+
+### Core Engine Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| **Viewport Virtualization** | `HardwareView.jsx` | ReactFlow canvas with zoom-dependent edge hiding. Edges are hidden at zoom < 0.5 to maintain 60FPS on large graphs (500+ nodes). Only visible elements are rendered via `onlyRenderVisibleElements`. |
+| **BFS Signal Tracing** | `HardwareView.jsx` | Bi-directional graph traversal engine. Pre-computes adjacency lists (`adjDown`/`adjUp`) via `useMemo`, then runs DFS from the selected node in both upstream and downstream directions. Highlighting is applied via direct DOM mutations to avoid ReactFlow's ResizeObserver infinite loop. |
+| **Synthesis Dashboard** | `SynthesisDashboard.jsx` | Real-time Area (mm²), Power (mW), and Latency (ns) metrics. Queries the backend's `/api/simulation/metrics` endpoint with live `node_count`/`edge_count`. Falls back to a deterministic local heuristic (`area = n*0.045 + e*0.001`) if the backend is unreachable. |
+| **Oscilloscope (Waveform Viewer)** | `WaveformPanel.jsx` | Per-node voltage-time trace viewer. Uses a deterministic seeded PRNG (Mulberry32) keyed to the node ID, ensuring the same node always produces the same waveform. Renders via Recharts `LineChart`. |
+| **Polymorphic Node System** | `PolymorphicNodeFactory.jsx` | Runtime node type routing based on the active synthesis engine. Switches between `AnalogJunctionNode`, `DigitalGateNode`, and `SpiceComponentNode` based on `data.engine`. |
+| **WebSocket Compiler** | `App.jsx` → `/ws/compile` | Streams compilation logs in real-time from the backend. Sends base64-encoded PyTorch model + test vectors, receives IR graph + timing data. |
+
+### Data Flow
+
+```
+User uploads .pt model + test vectors
+        │
+        ▼
+WebSocket /ws/compile → SynapseCompiler → IR Graph (JSON)
+        │
+        ▼
+processGraph() → Dagre Layout (Web Worker) → ReactFlow nodes/edges
+        │
+        ▼
+Node Click → simulateNodePhysics(id) → Deterministic Waveform
+        │
+        ▼
+ML_EXPORT_DATA → console.log(JSON.stringify({nodeId, trace}))
+```
 
 ---
 
-## Overview
+## Project Status
 
-SYNAPSE takes a trained PyTorch `nn.Sequential` model and compiles it into three outputs:
+### ✅ Phase 1: Simulation Core (COMPLETE)
 
-| Output | Description |
-|--------|-------------|
-| **Intermediate Representation (IR)** | A graph of analog circuit nodes and edges — voltage sources, conductance elements, transimpedance amplifiers, and rectifiers |
-| **SPICE Netlist** | A complete, deterministic circuit description ready for analog simulation |
-| **Validation Report** | Closed-form mathematical proof that the analog circuit produces identical outputs to the digital model |
+- [x] PyTorch model → IR graph compilation pipeline
+- [x] Auto-layout via Dagre with async Web Worker
+- [x] Bi-directional BFS signal path tracing
+- [x] Zoom-dependent viewport virtualization
+- [x] Deterministic per-node waveform generation (seeded PRNG)
+- [x] Real-time Synthesis Dashboard (Area/Power/Latency)
+- [x] DOM-based highlighting (avoids ReactFlow infinite loops)
+- [x] Undo/Redo history stack
+- [x] Manual component placement (Resistor, Capacitor, Transistor, etc.)
+- [x] SPICE netlist export (JSON)
+- [x] Clerk authentication
+- [x] Workspace save/load (SQLite)
+- [x] ML Data Export hook (`ML_EXPORT_DATA` console.log)
 
-### Supported Layers
+### ⬜ Phase 2: Backend Integration (PENDING)
 
-| PyTorch Layer | Analog Equivalent | SPICE Element |
-|---------------|-------------------|---------------|
-| `nn.Linear` | Dual-rail differential conductance crossbar | Resistors + Behavioral TIA |
-| `nn.ReLU` | Precision half-wave rectifier | `E_RELU VALUE = {MAX(0, V(...))}` |
+- [ ] Replace client-side `simulateNodePhysics()` with real backend `/api/simulation/node/{node_id}` endpoint
+- [ ] Integrate actual SPICE simulation engine (ngspice/Xyce)
+- [ ] Connect Synthesis Dashboard to physical EDA tool outputs (Yosys/OpenROAD)
+- [ ] Real GDS-II export via gdstk (endpoint exists, needs validation)
+- [ ] DRC/LVS verification against real design rules
+- [ ] Cloud compilation via H100 cluster (`PRODUCTION_COMPUTE_URL`)
 
----
+### ⬜ Phase 3: Production (FUTURE)
 
-## The Math
-
-SYNAPSE maps digital **Multiply-Accumulate (MAC)** operations to physical **Kirchhoff's Current Law (KCL)** using dual-rail differential conductance.
-
-### Digital Domain
-```
-y_j = Σ(W_ji · x_i) + b_j
-```
-
-### Analog Domain
-Each weight `W_ji` is encoded as a pair of conductances:
-```
-W ≥ 0  →  G+ = W · β,   G- = 0
-W < 0  →  G+ = 0,        G- = |W| · β
-```
-
-Kirchhoff's Current Law naturally computes the summation:
-```
-I_j+ = Σ(V_in_i · G+_ji)    (positive rail)
-I_j- = Σ(V_in_i · G-_ji)    (negative rail)
-```
-
-A transimpedance amplifier (TIA) converts the differential current to voltage:
-```
-V_out_j = (I_j+ - I_j-) · R_f
-```
-
-With scaling constants `α = 1 V/unit`, `β = 1μS/unit`, `R_f = 1MΩ`:
-```
-V_out_j = Σ(W_ji · x_i) + b_j    ← exact equivalence
-```
-
-**ReLU** is implemented as a precision half-wave rectifier: `V_relu = max(0, V_out)`.
+- [ ] Multi-user collaboration (WebSocket rooms)
+- [ ] Version control for circuit designs
+- [ ] Component library marketplace
+- [ ] FPGA bitstream generation
 
 ---
 
-## Quick Start
+## Technical Constraints
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- (Optional) Docker
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Max Node Capacity | ~500 nodes | Above this, edges auto-hide at zoom < 0.5 |
+| Waveform Points | 30 per trace | Deterministic via Mulberry32 PRNG |
+| Layout Engine | Dagre (async Worker) | Auto `fitView` after batch imports |
+| ReactFlow Version | @xyflow/react 12.x | Using DOM mutations for highlighting |
+| React Version | 19.x | Rules of Hooks strictly enforced |
+| Build Tool | Vite 8 | HMR active in development |
+| Auth | Clerk (dev keys) | Must upgrade to production keys for deploy |
 
-### Local Development
+---
 
-**1. Clone and install backend dependencies:**
+## Development Setup
+
 ```bash
-git clone https://github.com/your-username/synapse.git
-cd synapse
-pip install -r requirements.txt
-```
+# 1. Clone and install
+git clone <repo-url>
+cd "ELECTRONICS+AI PEOJECT"
 
-**2. Generate test data:**
-```bash
-# Simple 2→4→2 model (quick test)
-python generate_model.py
+# 2. Backend
+pip install fastapi uvicorn torch pydantic httpx orjson psutil
+python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload --env-file .env
 
-# MNIST digit classifier (production scale)
-python train_mnist.py
-```
-
-**3. Start the backend:**
-```bash
-uvicorn server:app --reload
-```
-
-**4. Start the frontend (new terminal):**
-```bash
+# 3. Frontend
 cd frontend
 npm install
 npm run dev
 ```
 
-**5. Open** `http://localhost:5173`, upload `mnist_model.pt` + `mnist_test_vectors.json`, and click **Compile to Silicon**.
+### Environment Variables
 
-### Docker
-
-```bash
-# Build the backend image
-docker build -t synapse-api .
-
-# Run on port 8000
-docker run -p 8000:8000 synapse-api
-```
+| Variable | Location | Purpose |
+|----------|----------|---------|
+| `VITE_CLERK_PUBLISHABLE_KEY` | `frontend/.env` | Clerk auth (required) |
+| `SYNAPSE_ENV` | `.env` | `production` or `development` |
+| `PRODUCTION_COMPUTE_URL` | `.env` | H100 cluster endpoint (Phase 2) |
+| `MASTER_AUTH_KEY` | `.env` | Backend API key validation |
 
 ---
 
-## Architecture
+## Cold Storage: Lock & Commit
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SYNAPSE Architecture                      │
-├──────────────┬──────────────────────┬───────────────────────┤
-│  Frontend    │  Backend API         │  Core Engine           │
-│  (React)     │  (FastAPI)           │  (Python)              │
-├──────────────┼──────────────────────┼───────────────────────┤
-│ App.jsx      │ server.py            │ synapse_compiler.py    │
-│ React Flow   │  POST /compile       │  State dict parser     │
-│ Tailwind CSS │  CORS middleware     │  Conductance mapper    │
-│ Lucide icons │  ORJSONResponse      │  IR graph builder      │
-│              │                      │  Netlist exporter      │
-│              │                      │  Closed-form validator │
-├──────────────┼──────────────────────┼───────────────────────┤
-│ Vercel       │ Docker / Railway     │  Embedded in backend   │
-│              │ Render / AWS ECS     │                        │
-└──────────────┴──────────────────────┴───────────────────────┘
-```
-
-### File Structure
-
-```
-synapse/
-├── synapse_compiler.py     # Core compilation engine (IR, netlist, validation)
-├── server.py               # FastAPI backend with /compile endpoint
-├── generate_model.py       # Simple 2→4→2 test model generator
-├── train_mnist.py          # MNIST digit classifier trainer
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Backend container
-├── .dockerignore
-├── README.md
-│
-├── model.pt                # Generated: simple model weights
-├── test_vectors.json       # Generated: simple test inputs
-├── mnist_model.pt          # Generated: MNIST model weights
-├── mnist_test_vectors.json # Generated: MNIST test digits
-│
-└── frontend/
-    ├── src/
-    │   ├── App.jsx         # React visualizer (React Flow + Tailwind)
-    │   └── index.css       # Dark theme + silicon trace styles
-    ├── vercel.json         # Vercel deployment config
-    ├── .env.example        # Environment variable documentation
-    ├── tailwind.config.js
-    ├── postcss.config.js
-    └── package.json
-```
-
----
-
-## Deployment
-
-### Backend → Docker (Railway / Render / AWS)
+Run these commands to freeze the project state:
 
 ```bash
-docker build -t synapse-api .
-docker run -p 8000:8000 -e CORS_ORIGINS="https://your-frontend.vercel.app" synapse-api
-```
-
-Environment variables:
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
-
-### Frontend → Vercel
-
-```bash
+# Lock all frontend dependencies to exact versions
 cd frontend
-npm run build
-# Deploy dist/ to Vercel, Netlify, or any static host
+npm ci
+npm shrinkwrap
+
+# Commit everything
+cd ..
+git add -A
+git commit -m "COLD_STORAGE: Phase 1 Simulation Core finalized — June 2026"
+git tag -a v1.0.0-phase1 -m "Phase 1: Simulation Core complete. Deterministic waveforms, BFS signal tracing, synthesis dashboard. Ready for Phase 2 backend integration."
+git push origin main --tags
 ```
-
-Set the environment variable in your hosting dashboard:
-| Variable | Value |
-|----------|-------|
-| `VITE_API_URL` | `https://your-api.railway.app` |
-
----
-
-## API Reference
-
-### `POST /compile`
-
-Compiles a PyTorch state dict into an analog circuit.
-
-**Request:** `multipart/form-data`
-| Field | Type | Description |
-|-------|------|-------------|
-| `model_file` | File (.pt) | PyTorch `state_dict` |
-| `test_vectors` | String (JSON) | Array of input vectors |
-
-**Response:** `application/json`
-```json
-{
-  "ir": {
-    "version": "2.0",
-    "metadata": { "layers": 3, "alpha_v": 1.0, "beta_s": 1e-6, "rf_ohm": 1e6 },
-    "nodes": [{ "id": "IN_0_0", "type": "voltage_source", "domain": "input" }],
-    "edges": [{ "source": "IN_0_0", "target": "JUNCT_0_0_POS", "type": "CONDUCTANCE", "value": 5.4e-7 }]
-  },
-  "netlist": "* SYNAPSE idealized netlist\n...\n.END",
-  "validation": {
-    "passed": true,
-    "max_abs_error": 7.1e-15,
-    "max_rel_error": 2.3e-14,
-    "per_output": [...]
-  },
-  "stats": {
-    "total_nodes": 257,
-    "total_edges": 2484,
-    "layers": 3
-  }
-}
-```
-
----
-
-## Scale Benchmarks
-
-| Model | Nodes | Edges | Netlist Lines | Validation |
-|-------|-------|-------|---------------|------------|
-| Linear 2→4→2 | 21 | 20 | 35 | ✅ 3.5e-17 |
-| ReLU 2→4→2 | 31 | 32 | 45 | ✅ 3.5e-17 |
-| MNIST 64→32→10 | 257 | 2,484 | 2,675 | ✅ 7.1e-15 |
 
 ---
 
 ## License
 
-MIT © 2026
-
----
-
-<div align="center">
-  <sub>Built with ⚡ by the SYNAPSE team</sub>
-</div>
+Proprietary — All rights reserved.

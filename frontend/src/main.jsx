@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
+import { ReactFlowProvider } from '@xyflow/react'
 import './index.css'
 import App from './App.jsx'
 
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
       <SignedIn>
-        <App />
+        <ReactFlowProvider>
+          <App />
+        </ReactFlowProvider>
       </SignedIn>
       <SignedOut>
         <RedirectToSignIn />

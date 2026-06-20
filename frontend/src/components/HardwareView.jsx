@@ -1,16 +1,74 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, Panel } from '@xyflow/react';
+import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, Panel, useOnViewportChange } from '@xyflow/react';
 import EmptyState from './EmptyState';
+import SynthesisDashboard from './panels/SynthesisDashboard';
+import WaveformPanel from './panels/WaveformPanel';
 
-export default function HardwareView({ isVisible, result, nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDragStart, undo, redo, canUndo, canRedo, nodeTypes, edgeTypes, miniMapNodeColor, metrics, terminalRef, onSimulationComplete }) {
-  if (!result && (!nodes || nodes.length === 0)) return <EmptyState icon="memory" title="Topology Engine Idle" message="Please compile a model or import a netlist to generate the layout." />;
+/**
+ * DETERMINISTIC SIMULATION BRIDGE
+ * Generates a unique, repeatable electrical signature per node ID using a seeded PRNG.
+ * The same node ID will always produce the same waveform — no Math.random().
+ */
+function seededRandom(seed) {
+  // Mulberry32 — a fast 32-bit seeded PRNG
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const simulateNodePhysics = async (id) => {
+  const seed = id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const rng = seededRandom(seed);
+  return Array.from({ length: 30 }, (_, i) => ({
+    time: i,
+    voltage: Math.sin(i * 0.4 + seed) * Math.cos(i * 0.2) * (rng() * 0.6 + 0.4)
+  }));
+};
+
+export default function HardwareView({ isVisible, isCalculating, result, nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeDragStart, undo, redo, canUndo, canRedo, nodeTypes, edgeTypes, miniMapNodeColor, metrics, terminalRef, onSimulationComplete }) {
+  // IMPORTANT: Early return guard moved BELOW all hooks to comply with Rules of Hooks.
+  // React requires hooks to be called in the same order on every render.
+  const isEmpty = !result && (!nodes || nodes.length === 0);
   
   const [isSimulating, setIsSimulating] = useState(false);
   const [rfInstance, setRfInstance] = useState(null);
-
   const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedNodeData, setSelectedNodeData] = useState([]);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationError, setSimulationError] = useState(false);
+  const [isWaveformMinimized, setIsWaveformMinimized] = useState(false);
+
   const containerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDetailed, setIsDetailed] = useState(false);
+
+  // Sync waveform visibility state to the container DOM so CSS can dynamically offset native ReactFlow widgets (like the attribution watermark)
+  useEffect(() => {
+    if (containerRef.current) {
+      const isVisible = selectedNodeData?.length > 0 || simulationError || simulationLoading;
+      if (isVisible && !isWaveformMinimized) {
+        containerRef.current.classList.add('waveform-open');
+        containerRef.current.classList.remove('waveform-minimized');
+      } else if (isVisible && isWaveformMinimized) {
+        containerRef.current.classList.add('waveform-minimized');
+        containerRef.current.classList.remove('waveform-open');
+      } else {
+        containerRef.current.classList.remove('waveform-open', 'waveform-minimized');
+      }
+    }
+  }, [selectedNodeData, simulationError, simulationLoading, isWaveformMinimized]);
+
+  useOnViewportChange({
+    onChange: (viewport) => {
+      const detailed = viewport.zoom > 0.5;
+      if (detailed !== isDetailed) {
+        setIsDetailed(detailed);
+      }
+    },
+  });
 
   const layoutState = useRef({ prevLength: 0, prevVisible: false });
 
@@ -27,7 +85,7 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
     if (isVisible && (justBecameVisible || batchImported || initialLoad)) {
       const timer = setTimeout(() => {
         rfInstance.fitView({ padding: 0.1, duration: 800 });
-      }, 50);
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [isVisible, rfInstance, nodes]);
@@ -40,6 +98,21 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Pre-calculate full graph adjacency lists for blazing fast DOM-based signal tracing
+  const { adjDown, adjUp } = useMemo(() => {
+    const down = {};
+    const up = {};
+    if (edges) {
+      edges.forEach(e => {
+        if (!down[e.source]) down[e.source] = [];
+        if (!up[e.target]) up[e.target] = [];
+        down[e.source].push({ next: e.target, edgeId: e.id });
+        up[e.target].push({ next: e.source, edgeId: e.id });
+      });
+    }
+    return { adjDown: down, adjUp: up };
+  }, [edges]);
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen().catch(err => {
@@ -50,66 +123,137 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
     }
   };
 
-  const handleNodeClick = (event, node) => {
+  const handleNodeClick = async (event, node) => {
+    event.stopPropagation();
+    
+    console.log(`[EDA_ENGINE] Node selected: ${node.id}`);
     setSelectedNode(node);
+    
+    try {
+      setSimulationLoading(true);
+      setSimulationError(false);
+      const data = await simulateNodePhysics(node.id);
+      setSelectedNodeData(data);
+      setSimulationLoading(false);
+
+      // ML Data Export hook — raw simulation vector ready for AI/ML model ingestion
+      console.log("ML_EXPORT_DATA:", JSON.stringify({
+        nodeId: node.id,
+        label: node.data?.label || node.id,
+        domain: node.data?.domain || 'unknown',
+        timestamp: Date.now(),
+        trace: data
+      }));
+    } catch (e) {
+      console.error("[EDA_ENGINE] Simulation fault:", e);
+      setSimulationError(true);
+      setSimulationLoading(false);
+    }
   };
 
   const handlePaneClick = () => {
     setSelectedNode(null);
   };
 
-  const { displayNodes, displayEdges } = useMemo(() => {
-    if (!selectedNode) return { displayNodes: nodes, displayEdges: edges };
+  const handleNodeMouseEnter = (event, node) => {
+    if (containerRef.current) containerRef.current.classList.add('is-node-hovered');
+    
+    // Fast DOM-based recursive signal tracing (BFS)
+    const connectedNodes = new Set([node.id]);
+    const connectedEdges = new Set();
+    
+    const traverse = (currentId, adjList) => {
+      const neighbors = adjList[currentId] || [];
+      neighbors.forEach(({ next, edgeId }) => {
+        connectedEdges.add(edgeId);
+        if (!connectedNodes.has(next)) {
+          connectedNodes.add(next);
+          traverse(next, adjList);
+        }
+      });
+    };
+    
+    // Trace entire signal path (both inputs leading to this node, and outputs driven by it)
+    traverse(node.id, adjDown);
+    traverse(node.id, adjUp);
 
-    // Build adjacency list for undirected path traversal to find the whole connected component
-    const adj = {};
-    edges.forEach(e => {
-      if (!adj[e.source]) adj[e.source] = [];
-      if (!adj[e.target]) adj[e.target] = [];
-      adj[e.source].push(e.target);
-      adj[e.target].push(e.source);
+    // Batch apply highlight classes to the physical DOM
+    connectedNodes.forEach(id => {
+      const nodeEl = document.querySelector(`.react-flow__node[data-id="${id}"]`);
+      if (nodeEl) nodeEl.classList.add('highlight-connection');
+    });
+    
+    connectedEdges.forEach(id => {
+      const safeId = CSS.escape(id);
+      const edgeEl = document.querySelector(`.react-flow__edge[data-id="${safeId}"]`) || document.querySelector(`[data-testid="rf__edge-${safeId}"]`);
+      if (edgeEl) edgeEl.classList.add('highlight-connection');
+    });
+  };
+
+  const handleNodeMouseLeave = () => {
+    if (containerRef.current) containerRef.current.classList.remove('is-node-hovered');
+    // Batch remove all highlights
+    document.querySelectorAll('.highlight-connection').forEach(el => {
+      el.classList.remove('highlight-connection');
+    });
+  };
+
+  const { displayNodes, displayEdges } = useMemo(() => {
+    if (!isDetailed && !selectedNode) return { displayNodes: nodes, displayEdges: [] };
+    return { displayNodes: nodes, displayEdges: edges };
+  }, [nodes, edges, isDetailed, selectedNode]);
+
+  // Handle active selection highlighting via DOM mutation to avoid ReactFlow ResizeObserver infinite loops
+  // Uses the memoized adjDown/adjUp to avoid redundant O(E) recomputation
+  useEffect(() => {
+    if (!containerRef.current || !nodes || !edges) return;
+    
+    // Reset all previous selection state
+    document.querySelectorAll('.highlight-active, .dimmed, .highlight-connection').forEach(el => {
+      el.classList.remove('highlight-active', 'dimmed', 'highlight-connection');
     });
 
-    const connected = new Set();
-    const queue = [selectedNode.id];
-    connected.add(selectedNode.id);
-
-    while (queue.length > 0) {
-      const curr = queue.shift();
-      const neighbors = adj[curr] || [];
-      for (const n of neighbors) {
-        if (!connected.has(n)) {
-          connected.add(n);
-          queue.push(n);
-        }
-      }
+    if (!selectedNode) {
+      containerRef.current.classList.remove('has-selection');
+      return;
     }
 
-    const displayNodes = nodes.map(n => ({
-      ...n,
-      style: {
-        ...n.style,
-        opacity: connected.has(n.id) ? 1 : 0.1,
-        boxShadow: selectedNode.id === n.id ? '0 0 20px #00f0ff' : 'none'
-      }
-    }));
+    containerRef.current.classList.add('has-selection');
 
-    const displayEdges = edges.map(e => {
-      const isConnected = connected.has(e.source) && connected.has(e.target);
-      return {
-        ...e,
-        animated: isConnected,
-        style: {
-          ...(e.style || {}),
-          stroke: isConnected ? '#00f0ff' : (e.style?.stroke || '#475569'),
-          strokeWidth: isConnected ? 3 : (e.style?.strokeWidth || 1.5),
-          opacity: isConnected ? 1 : 0.1,
+    // Reuse the memoized adjacency lists (computed once per edge change in the useMemo above)
+    const connectedNodes = new Set([selectedNode.id]);
+    const connectedEdges = new Set();
+
+    const traverse = (currentId, adjList) => {
+      const neighbors = adjList[currentId] || [];
+      neighbors.forEach(({ next, edgeId }) => {
+        connectedEdges.add(edgeId);
+        if (!connectedNodes.has(next)) {
+          connectedNodes.add(next);
+          traverse(next, adjList);
         }
-      };
+      });
+    };
+
+    traverse(selectedNode.id, adjDown);
+    traverse(selectedNode.id, adjUp);
+
+    nodes.forEach(n => {
+      const nodeEl = document.querySelector(`.react-flow__node[data-id="${CSS.escape(n.id)}"]`);
+      if (nodeEl) {
+        if (connectedNodes.has(n.id)) nodeEl.classList.add('highlight-active');
+        else nodeEl.classList.add('dimmed');
+      }
     });
 
-    return { displayNodes, displayEdges };
-  }, [nodes, edges, selectedNode]);
+    connectedEdges.forEach(id => {
+      const safeId = CSS.escape(id);
+      const edgeEl = document.querySelector(`.react-flow__edge[data-id="${safeId}"]`) || document.querySelector(`[data-testid="rf__edge-${safeId}"]`);
+      if (edgeEl) {
+        edgeEl.classList.add('highlight-connection');
+      }
+    });
+  }, [selectedNode, nodes, edges, adjDown, adjUp]);
 
   const handleExportNetlist = async () => {
     try {
@@ -170,6 +314,9 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
       setIsSimulating(false);
     }
   };
+
+  // Rules of Hooks: guard AFTER all hooks have been called
+  if (isEmpty) return <EmptyState icon="memory" title="Topology Engine Idle" message="Please compile a model or import a netlist to generate the layout." />;
 
   return (
     <section ref={containerRef} className="flex-1 relative overflow-hidden flex flex-col bg-slate-950">
@@ -247,6 +394,24 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
 
       <div className="w-full h-full relative flex" style={{ paddingTop: '52px' }}>
         <div className="flex-1 relative">
+            {isCalculating && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-4 p-8 bg-slate-900 border border-cyan-500/50 rounded-lg shadow-[0_0_30px_rgba(8,145,178,0.2)]">
+                  <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="text-cyan-400 font-mono text-sm tracking-widest uppercase font-bold">
+                    Compiling Topology...
+                  </div>
+                </div>
+              </div>
+            )}
+            <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+              <defs>
+                <linearGradient id="bus-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#1e293b" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#0891b2" stopOpacity="0.8" />
+                </linearGradient>
+              </defs>
+            </svg>
             <ReactFlow
               nodes={displayNodes}
               edges={displayEdges}
@@ -257,15 +422,22 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
               onNodeClick={handleNodeClick}
               onPaneClick={handlePaneClick}
               onNodeDragStart={onNodeDragStart}
+              onNodeMouseEnter={handleNodeMouseEnter}
+              onNodeMouseLeave={handleNodeMouseLeave}
               onInit={setRfInstance}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               className="bg-transparent"
-            nodesDraggable={true}
-            elementsSelectable={true}
-            edgesFocusable={false}
-            minZoom={0.05}
-            maxZoom={2}
+              nodesDraggable={true}
+              elementsSelectable={true}
+              edgesFocusable={false}
+              onlyRenderVisibleElements={true}
+              nodesConnectable={false}
+              noDragClassName="nodrag"
+              preventScrolling={true}
+              zoomOnScroll={true}
+              minZoom={0.05}
+              maxZoom={2}
           >
             <Panel position="top-left" className="flex gap-2">
               <button 
@@ -273,7 +445,9 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
                 className="w-8 h-8 rounded bg-surface-container border border-outline-variant text-on-surface-variant hover:text-white hover:bg-surface-variant flex items-center justify-center transition-all cursor-pointer shadow-lg"
                 title="Toggle Fullscreen"
               >
-                <span className="material-symbols-outlined text-sm">{isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>
+                <span className="material-symbols-outlined text-lg">
+                  {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+                </span>
               </button>
               <div className="w-px bg-outline-variant/50 my-1"></div>
               <button 
@@ -294,17 +468,35 @@ export default function HardwareView({ isVisible, result, nodes, edges, onNodesC
               </button>
             </Panel>
             <Background variant={BackgroundVariant.Dots} color="#353436" gap={24} size={1.5} />
-            <Controls className="!bg-white !shadow-[0_0_20px_rgba(255,255,255,0.4)] !border-none !rounded-lg scale-125 origin-bottom-left ml-4 mb-4 [&_svg]:!fill-slate-800 [&_svg]:!text-slate-800 [&_path]:!fill-slate-800 [&_button]:!border-b-slate-200 [&_button:hover]:!bg-slate-100" showInteractive={true} />
+            
+            {/* Dynamically push native ReactFlow widgets up so the WaveformPanel doesn't crush them */}
+            <Controls 
+              className="!bg-white !shadow-[0_0_20px_rgba(255,255,255,0.4)] !border-none !rounded-lg scale-125 origin-bottom-left ml-4 [&_svg]:!fill-slate-800 [&_svg]:!text-slate-800 [&_path]:!fill-slate-800 [&_button]:!border-b-slate-200 [&_button:hover]:!bg-slate-100 transition-all duration-300" 
+              showInteractive={true} 
+              style={{ marginBottom: (selectedNodeData?.length > 0 || simulationError || simulationLoading) ? (isWaveformMinimized ? '80px' : '220px') : '16px' }}
+            />
             <MiniMap
               nodeColor={miniMapNodeColor}
               maskColor="rgba(0, 0, 0, 0.7)"
+              className="transition-all duration-300"
               style={{
                 backgroundColor: '#131315',
                 border: '1px solid #353436',
                 borderRadius: '0px',
+                marginBottom: (selectedNodeData?.length > 0 || simulationError || simulationLoading) ? (isWaveformMinimized ? '80px' : '220px') : '16px'
               }}
               pannable
               zoomable
+            />
+            
+            <SynthesisDashboard nodes={nodes} edges={edges} />
+            <WaveformPanel 
+              data={selectedNodeData} 
+              nodeLabel={selectedNode?.data?.label || selectedNode?.id} 
+              loading={simulationLoading}
+              error={simulationError}
+              isMinimized={isWaveformMinimized}
+              setIsMinimized={setIsWaveformMinimized}
             />
           </ReactFlow>
         </div>

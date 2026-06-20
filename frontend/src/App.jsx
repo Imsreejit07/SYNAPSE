@@ -1,12 +1,9 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { ReactFlow, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
+import { applyNodeChanges, applyEdgeChanges, addEdge, useReactFlow } from '@xyflow/react';
 import { useUser, UserButton } from '@clerk/clerk-react';
+import { getLayoutedElementsAsync } from './utils/layoutUtils';
 import '@xyflow/react/dist/style.css';
-import { Upload, Zap, Activity, CheckCircle2, XCircle, Code, ChevronRight, FileJson, Database, Cpu, Layers, GitBranch } from 'lucide-react';
-import WorkspaceView from './components/WorkspaceView';
 import HardwareView from './components/HardwareView';
-import NetlistInspector from './components/NetlistInspector';
-import MetricsDashboard from './components/MetricsDashboard';
 import SettingsView from './components/SettingsView';
 import DocumentationView from './components/DocumentationView';
 import SystemStatusView from './components/SystemStatusView';
@@ -37,24 +34,13 @@ const miniMapNodeColor = (node) => {
 };
 
 /* ─────────────────────────────────────────────────────────────
-   Metrics Stat Card
-   ───────────────────────────────────────────────────────────── */
-const StatCard = ({ icon: Icon, label, value, color }) => (
-  <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex items-center gap-3">
-    <Icon className={`w-5 h-5 ${color} shrink-0`} />
-    <div>
-      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-mono text-white">{value}</p>
-    </div>
-  </div>
-);
-
-/* ─────────────────────────────────────────────────────────────
    Main App
    ───────────────────────────────────────────────────────────── */
 function App() {
   const { user } = useUser();
+  const { fitView } = useReactFlow();
   const [activeTab, setActiveTab] = useState('architecture');
+  const [isCalculating, setIsCalculating] = useState(false);
   const [modelFile, setModelFile] = useState(null);
   const [testVectorsFile, setTestVectorsFile] = useState(null);
   const [isCompiling, setIsCompiling] = useState(false);
@@ -264,24 +250,34 @@ function App() {
         }));
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         try {
-          // Attempt to parse as final JSON
           const payload = JSON.parse(event.data);
           if (payload.type === 'final_json') {
             const data = payload.data;
             if (data.timing) setTimingData(data.timing);
             setResult(data);
-            processGraph(data.ir);
+            await processGraph(data.ir);
             setActiveTab('architecture');
             setIsCompiling(false);
             setWsStatus('disconnected');
             ws.close();
           }
         } catch (e) {
-          // If not JSON, it's a stream log
-          if (terminalRef.current) {
-            terminalRef.current.write(event.data + '\r\n');
+          // Check if this is a JSON parse error vs a processGraph execution error
+          if (e instanceof SyntaxError) {
+            // Not JSON, it's a stream log
+            if (terminalRef.current) {
+              terminalRef.current.write(event.data + '\r\n');
+            }
+          } else {
+            console.error("Pipeline Execution Error:", e);
+            if (terminalRef.current) {
+              terminalRef.current.write(`\x1b[1;31m[CRITICAL EXCEPTION] ${e.message}\x1b[0m\r\n`);
+            }
+            setIsCompiling(false);
+            setWsStatus('disconnected');
+            ws.close();
           }
         }
       };
@@ -315,8 +311,9 @@ function App() {
   };
 
   /* ── Graph Layout ────────────────────────────── */
-  const processGraph = (ir) => {
+  const processGraph = async (ir) => {
     if (!ir || !ir.nodes) return;
+    setIsCalculating(true);
 
     // Categorize nodes by domain for smart column layout
     const domainColumns = {
@@ -369,8 +366,8 @@ function App() {
       };
     });
 
+    const isLargeGraph = ir.edges.length > 200;
     const newEdges = ir.edges.map((edge, i) => {
-      const isLargeGraph = ir.edges.length > 200;
       return {
         id: `e-${i}`,
         source: edge.source || edge.source_pos, // Fallback for TIA
@@ -381,8 +378,32 @@ function App() {
       };
     });
 
-    setNodes(newNodes);
-    setEdges(newEdges);
+    const { nodes: layoutedNodes, edges: layoutedEdges } = await getLayoutedElementsAsync(newNodes, newEdges);
+
+    const isMassive = layoutedEdges.length > 100;
+    const finalEdges = layoutedEdges.map((edge) => {
+      return {
+        ...edge,
+        type: 'smoothstep',
+        hidden: isMassive, // Completely hide edges for massive graphs
+        animated: false,
+        zIndex: isMassive ? -1 : 0,
+        style: { 
+          stroke: isMassive ? 'url(#bus-gradient)' : '#06b6d4',
+          strokeWidth: isMassive ? 0.5 : 1,
+          fill: 'none',
+          strokeOpacity: isMassive ? 0.1 : 0.8,
+          pointerEvents: isMassive ? 'none' : 'auto'
+        }
+      };
+    });
+
+    setNodes(layoutedNodes);
+    setEdges(finalEdges);
+    setIsCalculating(false);
+    
+    // Fit the view to the newly beautifully arranged graph
+    setTimeout(() => fitView({ padding: 0.2, duration: 800 }), 50);
   };
 
   /* ── Derived metrics ─────────────────────────── */
@@ -525,13 +546,13 @@ function App() {
             {activeTab === 'architecture' && (
               <div className="px-gutter mb-6">
                 <div className="bg-primary-container border border-slate-800 p-4 relative overflow-hidden">
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2">
+                  <div className="relative z-10 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-neon-blue text-lg">cloud_upload</span>
                       <span className="text-label-caps text-xs text-on-surface">ASSETS</span>
                     </div>
 
-                    <div className="relative group mb-2 cursor-pointer">
+                    <div className="relative group cursor-pointer">
                       <input type="file" id="model-upload" className="hidden" onChange={(e) => setModelFile(e.target.files[0])} accept=".pt,.pth" />
                       <label htmlFor="model-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
                         <div className="flex items-center gap-2">
@@ -544,27 +565,27 @@ function App() {
                       </label>
                     </div>
 
-                    <NetlistImporter setNodes={setNodes} setEdges={setEdges} terminalRef={terminalRef} />
+                    <NetlistImporter setNodes={setNodes} setEdges={setEdges} terminalRef={terminalRef} setIsCalculating={setIsCalculating} />
 
-                    <div className="flex flex-col gap-2 mt-4 mb-4">
-                      <div className="flex gap-2">
-                        <button onClick={saveWorkspace} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs py-2 rounded">
+                    <div className="flex flex-col gap-2 w-full">
+                      <div className="flex gap-2 w-full">
+                        <button onClick={saveWorkspace} className="flex-1 bg-transparent hover:bg-cyan-950/30 text-[#00d2ff] border border-[#00d2ff]/80 font-mono text-[11px] font-bold py-2.5 px-2 rounded transition-all uppercase tracking-widest text-center">
                           SAVE LAYOUT
                         </button>
-                        <button onClick={loadWorkspace} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs py-2 rounded">
+                        <button onClick={loadWorkspace} className="flex-1 bg-transparent hover:bg-cyan-950/30 text-[#00d2ff] border border-[#00d2ff]/80 font-mono text-[11px] font-bold py-2.5 px-2 rounded transition-all uppercase tracking-widest text-center">
                           LOAD LAYOUT
                         </button>
                       </div>
-                      <button onClick={clearWorkspace} className="w-full bg-red-900/50 hover:bg-red-800/80 border border-red-500/50 text-red-200 font-mono text-xs py-2 rounded transition-colors">
+                      <button onClick={clearWorkspace} className="w-full bg-transparent hover:bg-red-950/30 text-[#ff3333] border border-[#ff3333]/80 font-mono text-[11px] font-bold py-2.5 px-4 rounded transition-all uppercase tracking-widest">
                         CLEAR LAYOUT
                       </button>
                     </div>
 
-                    <button onClick={spawnMemristor} className="w-full bg-neon-purple text-white py-2 mb-4 font-code-sm text-[10px] tracking-widest hover:brightness-110 active:scale-95 transition-all border border-neon-purple/50">
+                    <button onClick={spawnMemristor} className="w-full bg-transparent hover:bg-purple-950/30 text-[#d288ff] border border-[#d288ff]/80 font-mono text-[11px] font-bold py-2.5 px-4 rounded transition-all uppercase tracking-widest">
                       + ADD MEMRISTOR ARRAY
                     </button>
 
-                    <div className="relative group mb-4 cursor-pointer">
+                    <div className="relative group cursor-pointer">
                       <input type="file" id="vectors-upload" className="hidden" onChange={(e) => setTestVectorsFile(e.target.files[0])} accept=".json" />
                       <label htmlFor="vectors-upload" className="block border border-dashed border-slate-700 p-3 bg-black/40 hover:border-neon-blue transition-colors cursor-pointer">
                         <div className="flex items-center gap-2">
@@ -578,7 +599,7 @@ function App() {
                     </div>
 
                     {error && (
-                      <div className="mb-4 p-2 bg-danger-red/10 border border-danger-red/30 text-[10px] text-danger-red font-code-sm">
+                      <div className="p-2 bg-danger-red/10 border border-danger-red/30 text-[10px] text-danger-red font-code-sm">
                         {error}
                       </div>
                     )}
@@ -586,7 +607,7 @@ function App() {
                     <button 
                       onClick={handleCompile}
                       disabled={isCompiling}
-                      className="w-full bg-neon-blue py-2.5 text-black font-label-caps text-xs hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-[11px] font-bold py-3 px-2 rounded shadow-[0_0_10px_rgba(8,145,178,0.3)] transition-all uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-1 whitespace-nowrap"
                     >
                       {isCompiling ? "COMPILING..." : "COMPILE TO SILICON"} 
                       {!isCompiling && <span className="material-symbols-outlined text-sm">chevron_right</span>}
@@ -619,7 +640,7 @@ function App() {
           <div className="flex-1 flex flex-col relative overflow-hidden">
             {/* HardwareView is ALWAYS mounted but hidden via display:none to preserve ReactFlow canvas state */}
             <div className={`flex-1 flex flex-col ${activeTab === 'architecture' ? '' : 'hidden'}`}>
-              <HardwareView isVisible={activeTab === 'architecture'} result={result} nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onNodeDragStart={takeSnapshot} undo={undo} redo={redo} canUndo={past.length > 0} canRedo={future.length > 0} nodeTypes={nodeTypes} edgeTypes={edgeTypes} miniMapNodeColor={miniMapNodeColor} metrics={metrics} terminalRef={terminalRef} onSimulationComplete={(data) => { setSimulationData(data); setActiveTab('simulation'); }} />
+              <HardwareView isVisible={activeTab === 'architecture'} isCalculating={isCalculating} result={result} nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onNodeDragStart={takeSnapshot} undo={undo} redo={redo} canUndo={past.length > 0} canRedo={future.length > 0} nodeTypes={nodeTypes} edgeTypes={edgeTypes} miniMapNodeColor={miniMapNodeColor} metrics={metrics} terminalRef={terminalRef} onSimulationComplete={(data) => { setSimulationData(data); setActiveTab('simulation'); }} />
             </div>
             {activeTab === 'simulation' && <SimulationPanel simulationData={simulationData} setSimulationData={setSimulationData} nodes={nodes} edges={edges} terminalRef={terminalRef} />}
             {activeTab === 'verification' && <VerificationPanel nodes={nodes} edges={edges} terminalRef={terminalRef} />}

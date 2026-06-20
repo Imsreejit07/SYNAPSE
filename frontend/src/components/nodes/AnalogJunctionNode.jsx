@@ -1,5 +1,5 @@
 import React from 'react';
-import { useReactFlow } from '@xyflow/react';
+import { useReactFlow, Handle, Position } from '@xyflow/react';
 
 export default function AnalogJunctionNode({ id, data }) {
   const { setNodes, setEdges } = useReactFlow();
@@ -19,8 +19,22 @@ export default function AnalogJunctionNode({ id, data }) {
     window.dispatchEvent(new CustomEvent('synapse-delete-node', { detail: { id } }));
   };
 
+  const isMinimal = ['input', 'reference', 'bias_reference'].includes(data.domain);
+
+  if (isMinimal) {
+    return (
+      <div className="px-3 py-1 bg-slate-900/50 border border-slate-700 rounded text-slate-400 text-[10px] uppercase tracking-widest relative min-w-[60px] text-center">
+        <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-cyan-400 !border-slate-800" />
+        {data.label}
+        <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-neon-purple !border-slate-800" />
+      </div>
+    );
+  }
+
   return (
-    <div className={`border-l-4 rounded-lg min-w-[120px] shadow-lg font-mono ${heatmapColor} border-t border-r border-b border-t-slate-700 border-r-slate-700 border-b-slate-700`}>
+    <div className={`border-l-4 rounded-lg min-w-[120px] shadow-lg font-mono ${heatmapColor} border-t border-r border-b border-t-slate-700 border-r-slate-700 border-b-slate-700 relative`}>
+      <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-cyan-400 !border-slate-800" />
+      
       <div className="bg-black/40 px-2 py-1 border-b border-black/30 flex justify-between items-center rounded-t-lg">
         <span className="font-bold text-[10px] tracking-widest uppercase">{data.domain || 'COMPONENT'}</span>
         <div className="flex items-center gap-1">
@@ -55,6 +69,8 @@ export default function AnalogJunctionNode({ id, data }) {
           </div>
         </div>
       </div>
+      
+      <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-neon-purple !border-slate-800" />
     </div>
   );
 }

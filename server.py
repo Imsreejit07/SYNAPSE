@@ -1,4 +1,6 @@
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Query
+import math
+import random
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
@@ -8,7 +10,6 @@ import io
 import os
 import sqlite3
 import time
-import random
 import base64
 import asyncio
 import httpx
@@ -190,7 +191,35 @@ from typing import Dict, Any
 async def export_netlist(payload: Dict[str, Any]):
     return {"status": "success", "message": "Netlist structure verified."}
 
-import math
+@app.get("/api/simulation/metrics")
+@app.post("/api/simulation/metrics")
+async def simulation_metrics(payload: Dict[str, Any] = None):
+    # Compute area/power/latency from live node and edge counts
+    n = 0
+    e = 0
+    if payload:
+        n = payload.get("node_count", 0)
+        e = payload.get("edge_count", 0)
+    return {
+        "area": f"{(n * 0.045 + e * 0.001):.2f}",
+        "power": f"{(n * 1.2 + e * 0.08):.2f}",
+        "latency": f"{(n * 0.5 + e * 0.02):.2f}"
+    }
+
+@app.get("/api/simulation/node/{node_id}")
+async def simulation_node(node_id: str):
+    # Generate a realistic-looking 100-point time-domain trace
+    trace = []
+    base_freq = (hash(node_id) % 10) + 1
+    for i in range(100):
+        t = round(i * 0.1, 1)
+        val = math.sin(t * base_freq) + (random.random() * 0.2 - 0.1)
+        if "RELU" in node_id and val < 0:
+            val = 0
+        trace.append({"time": t, "voltage": round(val, 3)})
+    
+    return {"trace": trace}
+
 import re
 
 def parse_time(t_str, default=0.0):
